@@ -69,7 +69,3 @@ https://nexus-playground.pleos.ai/repository/maven-releases/ai/pleos/playground/
 - [도메인 객체 수명 관리](https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/Vehicle/obtain-domain-object)
 - [Get API](https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/Vehicle/get-property)
 - [Pleos 에뮬레이터 설치](https://document.pleos.ai/docs/connect/guide/getting-started/application-development/setup-connect-sdk-emulator)
-
-## 기존 저장소 메모
-
-Hello SSAFY

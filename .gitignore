@@ -1,0 +1,53 @@
+# Gradle / Kotlin / native build caches
+.gradle/
+.kotlin/
+**/build/
+.cxx/
+.externalNativeBuild/
+
+# Local Android SDK path and machine configuration
+local.properties
+**/local.properties
+
+# IDE local files
+.idea/
+*.iml
+.vscode/
+
+# Android packages and generated artifacts
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+
+# Signing materials and private configuration
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+**/keystore.properties
+signing.properties
+**/signing.properties
+secrets.properties
+**/secrets.properties
+.env
+.env.*
+!.env.example
+
+# Emulator data, if accidentally placed inside the project
+.android/
+*.avd/
+
+# Logs and operating system files
+*.log
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep the reproducible Gradle wrapper in version control
+!gradlew
+!gradlew.bat
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties

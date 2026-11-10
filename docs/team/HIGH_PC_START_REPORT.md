@@ -2,6 +2,15 @@
 
 기준: 2026-11-10 / 작업 branch: chore/sl-baseline-v1
 
+[확실] 준비 코드 commit: 600e2fb67e2451e058bd9f11ece4136bc2c0cad3. 아래 링크 추가는 문서 전용 변경이며 테스트한 앱 코드와 구분한다.
+
+## 협업 링크
+- [G0 준비 PR](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/1)
+- [총괄 작업](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/2)
+- [고사양 담당](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/3)
+- [내비 담당](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4)
+- [StarLog 담당](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/5)
+
 ## 확인 결과
 - [확실] 원격 master b4180e86e101f4e8e7196546a93c10f4d62c5453를 기준으로 원본 폴더에서 준비 branch를 생성했다.
 - [확실] 이전 대화에서 구현한 Native 지도·WebGL Activity·로컬 MapLibre GL JS 5.15.0 자산이 원본에 미커밋 상태였다. 삭제·stash·복사본 생성 없이 보존해 준비 PR에 포함했다.

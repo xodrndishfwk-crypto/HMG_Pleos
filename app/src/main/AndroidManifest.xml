@@ -7,6 +7,7 @@
     <uses-permission android:name="pleos.car.permission.CAR_DOORS" />
 
     <application
+        android:name=".StarlogApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

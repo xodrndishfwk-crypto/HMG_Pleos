@@ -96,7 +96,7 @@ class NativeMapActivity : AppCompatActivity() {
                 setColor(Color.argb(242, 0, 91, 210))
             }
             addView(TextView(this@NativeMapActivity).apply {
-                text = "↱  530m"
+                setText(R.string.prototype_maneuver)
                 textSize = 34f
                 setTextColor(Color.WHITE)
             })
@@ -377,13 +377,13 @@ class NativeMapActivity : AppCompatActivity() {
     private class AtmosphereView(context: android.content.Context) : View(context) {
         private val atmospherePaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
+        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+            super.onSizeChanged(w, h, oldw, oldh)
             atmospherePaint.shader = LinearGradient(
                 0f,
                 0f,
                 0f,
-                height.toFloat(),
+                h.toFloat(),
                 intArrayOf(
                     Color.argb(255, 55, 139, 194),
                     Color.argb(255, 72, 153, 204),
@@ -394,6 +394,10 @@ class NativeMapActivity : AppCompatActivity() {
                 floatArrayOf(0f, 0.18f, 0.23f, 0.28f, 0.34f),
                 Shader.TileMode.CLAMP,
             )
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
             canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), atmospherePaint)
         }
     }

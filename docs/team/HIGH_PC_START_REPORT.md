@@ -62,6 +62,19 @@
 - [확실] 첫 스타일 오류 시험은 테스트가 Map 객체를 반환하며 JS callback timeout이 발생했다. primitive 값을 반환하도록 시험 호출을 수정한 뒤 단일 재시험과 최종 전체4개 재시험이 통과했다. 실패 이력을 숨기지 않는다.
 - [확실] 에뮬레이터 SDK 조회 성공은 실차 주행 검증을 뜻하지 않는다. 고정530m·차량 표식 및 실시간 진행 연결은 다음 G1/R/I 단계의 구현 범위다.
 
-### 사용자/팀원이 확인할 항목
-- [모름] 노트북 두 사람의 실제 GitHub 계정과 각 계정의 read/push 권한은 아직 확인되지 않았다. 각자 저장소 접근·자신의 기능 branch push 가능 여부를 확인하고 담당 Issue #4/#5에 남겨야 한다.
-- [확실] 이 항목은 준비 작업 완료의 외부 확인 조건이다. 코드 문제가 해결됐다고 팀 접근권한까지 완료 처리하지 않는다.
+### 팀 접근권한 확인
+- [확실] 사용자가 노트북 두 사람 모두 Push 가능하다고 확인했다(2026-11-10). 이전 권한 확인 요청은 해제한다.
+- [확실] 이는 사용자에게 확인받은 결과이며 다른 두 계정으로 고사양 AI가 직접 로그인 시험을 했다는 뜻은 아니다. 계정명이나 인증 토큰을 새로 받을 필요는 없다.
+- [확실] 팀 접근권한 확인과 G1 공통 계약 준비는 별개이며 G1은 아직 NOT_READY다.
+
+## lint 경고 해소 및 권한 확인 (최신 결과, 2026-11-10)
+
+- [확실] 앞 절의 lint 16 warnings는 수정 전 이력이다. 최신 결과는 lint XML issue0, 텍스트 보고서 `No issues found`다. lint 검사 제외·새 suppress·baseline으로 경고를 숨기지 않았다.
+- [확실] 5개 LogNotTimber: 직접 Android Log 호출을 Timber로 통일했다. 기존 전이 의존성에서 확인한 Timber5.0.1을 직접 의존성으로 선언하고 디버그 앱에서 DebugTree를 초기화해 로그가 사라지지 않게 했다.
+- [확실] 2개 DrawAllocation: Native 화면의 LinearGradient와 배열 생성은 onDraw 대신 onSizeChanged에서 수행한다.
+- [확실] 2개 UseTomlInstead: 기존 MapLibre13.7.1·Vehicle2.3.2 버전을 유지하며 version catalog로 옮겼다.
+- [확실] 7개 SetTextI18n: 해당 문구를 strings.xml로 옮기고 주행 요약은 위치 인자가 있는 리소스 형식으로 표시한다.
+- [확실] assembleDebug / testDebugUnitTest / lintDebug / assembleDebugAndroidTest 재실행 성공. 단위 테스트23개, 실패0/오류0.
+- [확실] 새 앱을 Pleos emulator-5554/user10에 재설치하고 지도/본문/스타일 오류 복구·20초 timeout·출처·실제 도어 재조회/해제 계측시험4개 모두 통과(45.493초).
+- [확실] 사용자에게 노트북 두 사람 모두 Push 가능하다는 확인을 받았고 Issue #4/#5에 기록했다. G0 접근권한 확인 요청은 해제한다.
+- [확실] lint0은 모든 빌드 도구 메시지가0이라는 의미는 아니다. 기존 Native SDK setPadding의 Kotlin deprecation 메시지와 native debug symbol strip 안내는 별도로 남는다. G1·실시간 내비·실차 주행 완료를 뜻하지 않는다.

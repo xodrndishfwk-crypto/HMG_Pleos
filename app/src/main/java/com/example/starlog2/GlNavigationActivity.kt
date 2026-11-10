@@ -7,7 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import timber.log.Timber
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -82,7 +82,7 @@ class GlNavigationActivity : AppCompatActivity() {
             mapReady = true
             retryButton.visibility = View.GONE
             updateAttributionInset()
-            status.text = "76° WebGL 지도 준비 완료"
+            status.setText(R.string.map_ready)
             pendingRoute?.let(::drawRoute) ?: loadRoute()
         }
 
@@ -99,7 +99,7 @@ class GlNavigationActivity : AppCompatActivity() {
         pendingRoute = null
         val token = mapSession.begin()
         retryButton.visibility = View.GONE
-        status.text = "WebGL 지도 초기화 중…"
+        status.setText(R.string.map_loading)
         instruction.text = "지도와 경로를 준비합니다."
         webView.stopLoading()
         webView.loadUrl("file:///android_asset/map.html?session=$token")
@@ -143,7 +143,7 @@ class GlNavigationActivity : AppCompatActivity() {
             val m = (14*d).toInt(); setMargins(m, m, 0, 0)
         })
         root.addView(Button(this).apply {
-            text = "차량 SDK 진단"
+            setText(R.string.vehicle_diagnostic_button)
             setOnClickListener { startActivity(Intent(this@GlNavigationActivity, MainActivity::class.java)) }
         }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
             val m = (14*d).toInt(); setMargins(0, m, m, 0)
@@ -190,7 +190,7 @@ class GlNavigationActivity : AppCompatActivity() {
         cancelRoute()
         val token = routeGeneration
         retryButton.visibility = View.GONE
-        status.text = "Valhalla 경로 요청 중…"
+        status.setText(R.string.route_loading)
         instruction.text = "강남역 → 테헤란로"
         routeTask = worker.submit {
             try {
@@ -201,7 +201,7 @@ class GlNavigationActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 runOnUiThread {
                     if (destroyed || token != routeGeneration) return@runOnUiThread
-                    Log.w("StarlogMap", "Route request failed: ${e.javaClass.simpleName}")
+                    Timber.tag("StarlogMap").w("Route request failed: %s", e.javaClass.simpleName)
                     status.text = "경로를 불러오지 못했습니다."
                     instruction.text = "네트워크와 경로 서버 상태를 확인하세요."
                     retryButton.visibility = View.VISIBLE
@@ -266,7 +266,7 @@ class GlNavigationActivity : AppCompatActivity() {
             .put("bearing",bearing(first,ahead))
         webView.evaluateJavascript("showRoute(${JSONObject.quote(payload.toString())})",null)
         val min=(route.seconds/60).toInt().coerceAtLeast(1)
-        status.text="76° 3D 주행 · %.2f km · 약 %d분".format(route.km,min)
+        status.text = getString(R.string.route_summary, route.km, min)
         instruction.text=route.maneuvers.firstOrNull()?:"경로 안내 없음"
     }
 

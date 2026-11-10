@@ -36,10 +36,11 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
-    implementation("org.maplibre.gl:android-sdk-opengl:13.7.1")
+    implementation(libs.maplibre.android)
+    implementation(libs.timber)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
-    implementation("ai.pleos.playground:Vehicle:2.3.2")
+    implementation(libs.pleos.vehicle)
 
 }

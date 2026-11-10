@@ -38,4 +38,14 @@ class Polyline6Test {
 
         assertTrue(result is Outcome.Err)
     }
+
+    @Test
+    fun decode_highBitOverflow_returnsInvalidResponse() {
+        val overflowingLatitude = "____________O"
+
+        val result = Polyline6.decode(overflowingLatitude + "???")
+
+        assertTrue(result is Outcome.Err)
+        assertEquals("INVALID_RESPONSE", (result as Outcome.Err).error.code)
+    }
 }

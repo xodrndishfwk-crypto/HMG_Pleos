@@ -1,0 +1,40 @@
+{
+  "routeId": "route-a",
+  "requestId": "request-a",
+  "points": [
+    {
+      "lat": 37.5,
+      "lon": 127
+    },
+    {
+      "lat": 37.501,
+      "lon": 127
+    },
+    {
+      "lat": 37.501,
+      "lon": 127.001
+    }
+  ],
+  "distanceM": 199.41,
+  "durationS": 45,
+  "maneuvers": [
+    {
+      "index": 0,
+      "beginPointIndex": 0,
+      "endPointIndex": 1,
+      "instruction": "우회전",
+      "typeCode": 10,
+      "lengthM": 111.195,
+      "durationS": 25
+    },
+    {
+      "index": 1,
+      "beginPointIndex": 1,
+      "endPointIndex": 2,
+      "instruction": "도착",
+      "typeCode": 4,
+      "lengthM": 88.215,
+      "durationS": 20
+    }
+  ]
+}

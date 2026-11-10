@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "type": "renderState",
+  "messageId": "render-42",
+  "seq": 42,
+  "payload": {
+    "sourceMode": "REPLAY",
+    "route": {
+      "routeId": "route-a",
+      "coordinates": [
+        [
+          127,
+          37.5
+        ],
+        [
+          127,
+          37.501
+        ],
+        [
+          127.001,
+          37.501
+        ]
+      ]
+    },
+    "pose": {
+      "coordinate": [
+        127,
+        37.5
+      ],
+      "headingDeg": 359,
+      "quality": "VALID"
+    },
+    "camera": {
+      "pitchDeg": 76,
+      "zoom": 17.7,
+      "lookAheadM": 310
+    },
+    "guidance": {
+      "routeId": "route-a",
+      "status": "ACTIVE",
+      "snappedPoint": {
+        "lat": 37.5,
+        "lon": 127
+      },
+      "alongM": 0,
+      "remainingM": 199.41,
+      "remainingS": 45,
+      "maneuverIndex": 0,
+      "nextInstruction": "우회전",
+      "distanceToManeuverM": 111.195
+    },
+    "experience": {
+      "mode": "DRIVING_SAFE",
+      "selectedStarId": null,
+      "stopElapsedMs": 0,
+      "entryEventId": null
+    },
+    "skyItems": [
+      {
+        "starId": "s",
+        "relativeBearingDeg": 2,
+        "distanceM": 900,
+        "selected": false
+      }
+    ],
+    "memory": {
+      "starId": "s",
+      "title": "기억 <>&\" \\ \n",
+      "placeLabel": null,
+      "dateAtMs": 1800000000000,
+      "photoRef": null
+    },
+    "error": {
+      "code": "STALE_DATA",
+      "messageKey": "telemetry.stale",
+      "retryable": true,
+      "requestId": null
+    }
+  }
+}

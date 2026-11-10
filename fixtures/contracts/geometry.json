@@ -1,0 +1,94 @@
+{
+  "toleranceM": 1,
+  "cases": [
+    {
+      "name": "straight",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.002,
+          0
+        ]
+      ],
+      "sample": [
+        0.001,
+        0
+      ],
+      "expectedAlongM": 111.19508
+    },
+    {
+      "name": "right-angle",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.001,
+          0
+        ],
+        [
+          0.001,
+          0.001
+        ]
+      ],
+      "sample": [
+        0.001,
+        0.0005
+      ],
+      "expectedAlongM": 166.79262
+    },
+    {
+      "name": "loop-early-leg",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.001,
+          0
+        ],
+        [
+          0.001,
+          0.001
+        ],
+        [
+          0,
+          0.001
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "sample": [
+        0.0005,
+        0
+      ],
+      "expectedAlongM": 55.59754
+    },
+    {
+      "name": "off-route",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0.002,
+          0
+        ]
+      ],
+      "sample": [
+        0.001,
+        0.001
+      ],
+      "expectedAlongM": 111.19508,
+      "expectedLateralM": 111.19508
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "type": "renderState",
+  "messageId": "render-43",
+  "seq": 43,
+  "payload": {
+    "sourceMode": "REPLAY",
+    "route": null,
+    "pose": null,
+    "camera": {
+      "pitchDeg": 76,
+      "zoom": 17.7,
+      "lookAheadM": 310
+    },
+    "guidance": null,
+    "experience": {
+      "mode": "DRIVING_SAFE",
+      "selectedStarId": null,
+      "stopElapsedMs": 0,
+      "entryEventId": null
+    },
+    "skyItems": [],
+    "memory": null,
+    "error": null
+  }
+}

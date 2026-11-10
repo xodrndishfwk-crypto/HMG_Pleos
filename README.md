@@ -44,16 +44,38 @@ adb shell am start -n com.example.starlog2/.MainActivity
 
 APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차량 API 연동 성공은 Pleos AVD에서 실제 성공 콜백과 반환값을 확인한 뒤 판단합니다.
 
-## Git 브랜치 컨벤션
+## Git 브랜치 및 협업 컨벤션
 
-- `master`: 검증된 통합 결과만 유지하는 기본 브랜치입니다. 직접 개발하거나 force push하지 않습니다.
-- `jioni`: 이 노트북에서 작업하는 개인 개발 브랜치입니다. 현재 내비게이션 코어 구현은 이 브랜치에서 진행합니다.
-- `integration/<기능>-v<버전>`: 여러 담당자의 기능을 합쳐 검증하는 통합 브랜치입니다. 예: `integration/starlog-v1`.
+적용 기준: `master`의 `4809f24` (`docs(readme): refine git branch and staging conventions`). 이제부터 3대 장비는 아래 규칙으로 형상관리합니다.
+
+### 1. 브랜치 규칙
+
+- `master`: 최종 검증된 통합 결과만 유지합니다. 코드 구현을 직접 병합하거나 `force push`하지 않습니다.
+- `integration/<기능>-v<버전>`: 여러 담당자의 기능을 합쳐 검증하는 통합 브랜치이며 **모든 기능 PR의 Base 브랜치**입니다. 현재 대상은 `integration/starlog-v1`입니다.
+- `jioni` / `seobice`: 각각 LAPTOP_1 내비게이션과 LAPTOP_2 스타로그 도메인의 작업 기준 브랜치입니다.
 - `feat/<기능>-v<버전>`: 독립 기능 개발 브랜치입니다. 예: `feat/sl-nav-v1`, `feat/sl-memory-v1`.
 - `fix/<기능>-<설명>`: 확인된 결함 수정 브랜치입니다. 예: `fix/navigation-off-route`.
 - `docs/<설명>` 및 `chore/<설명>`: 문서와 빌드·설정·정리 작업에 사용합니다.
 
-브랜치는 최신 기준 브랜치에서 만들고, 커밋 메시지는 `feat(navigation): ...`, `fix(navigation): ...`, `test(navigation): ...`, `docs(readme): ...`처럼 `<type>(<scope>): <summary>` 형식을 사용합니다. 기능 브랜치는 PR로 통합하며 `master`에는 직접 병합하지 않습니다.
+### 2. 담당 경로 스테이징 규칙
+
+`git add .`을 사용하지 않고 담당 경로만 명시적으로 스테이징합니다.
+
+- HIGH_PC: `contracts/**`, `integration/**`, `platform/**`, `MainActivity`, WebGL/assets, `build.gradle.kts`, `AndroidManifest.xml`, `docs/**`
+- LAPTOP_1 (`jioni`): `app/src/{main,test}/java/com/example/starlog2/navigation/**`
+- LAPTOP_2 (`seobice`): `app/src/{main,test,androidTest}/java/com/example/starlog2/starlog/**`
+- 커밋 제외: `*.jks`, `*.apk`, `local.properties`, `.gradle/`, `build/` 및 타인 담당 파일
+
+공유 설정이나 의존성 변경이 필요하면 직접 커밋하지 않고 Manager에게 `CHANGE_REQUEST`를 먼저 남깁니다. README 수정은 이번 사용자 요청에 따른 명시적 문서 변경이며 다른 `docs/**` 파일은 함께 스테이징하지 않습니다.
+
+### 3. 커밋과 PR 규칙
+
+- 커밋 메시지: `<type>(<scope>): <summary>` 형식, 현재형, 50자 이내
+- type: `feat`, `fix`, `test`, `refactor`, `docs`, `chore`
+- scope: `navigation`, `starlog`, `contracts`, `renderer`, `platform`, `readme`, `team`
+- 새 브랜치는 `git fetch origin` 후 최신 기준 브랜치에서 생성
+- 단위 테스트와 `git diff --cached --name-only` 확인 후 PR 생성
+- 기능 PR은 `integration/starlog-v1`을 Base로 사용하고 HIGH 검증 전 `master`에 직접 반영하지 않음
 
 ## LAPTOP_1 Navigation v1/v2 보고서 (Manager AI용)
 
@@ -63,16 +85,41 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 
 워크플로우 준수 여부와 정상화 상태는 [`docs/LAPTOP_1_WORKFLOW_AUDIT.md`](docs/LAPTOP_1_WORKFLOW_AUDIT.md)를 먼저 확인하세요. 현재 G1은 `NOT_READY`이며 v2는 `WAITING_G1_DRAFT_REVIEW`입니다.
 
+### 현재 워크플로우 공식 진도
+
+| 단계 | 상태 | 근거와 다음 행동 |
+| --- | --- | --- |
+| G0 원본 준비 | HIGH 완료 | HIGH가 원본 코드·빌드·Pleos G0를 검증함 |
+| G1 공통 준비 | `NOT_READY` | 승인 BASE_SHA, contract/fixture hash와 H-G1 대기 |
+| L1-1 환경·시나리오 준비 | 완료 | 저장소 접근, `jioni` 기준선, 수동 JVM 시험 확인 |
+| L1-2 G1 수신·검증 | 대기 | H-G1 수신 후 `BASELINE_ACK` 필요 |
+| N1 경로·진행·Replay | `PRE_G1_ARTIFACT` | 구현은 존재하지만 승인 contract 기반 수락 전 |
+| N2 오류·이탈·도착 | `PRE_G1 + INDEPENDENT_FIX` | contract 비종속 Retry-After 결함 수정·회귀시험 완료 |
+| HANDOFF | `HANDOFF_READY` | Issue #4와 Draft PR #7에 SHA·시험·다음 행동 기록 |
+| RECEIVED / ACCEPTED | 대기 | HIGH의 수신 확인과 Android 검증 필요 |
+| INTEGRATED / DONE | 미완료 | 통합·Pleos·전체 주행 검증 전에는 완료 처리 금지 |
+
+현재 공식 진도는 **L1-1 완료, L1-2 대기**입니다. N1/N2 코드는 검토 가능한 PRE-G1 산출물이지만 G1 승인 전에는 공식 checkpoint 완료가 아닙니다.
+
+- 작업 기준선: `jioni` / `9b6108c`
+- 독립 수정 브랜치: `feat/sl-nav-v2`
+- 독립 수정 SHA: `ce418b0` (`fix(navigation): prevent retry delay overflow`)
+- Draft PR: [#7](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/7)
+- 검증: Kotlin/JVM JUnit `OK (31 tests)`, exit code 0
+- Android Gradle/lint 및 Pleos 실제 입력: `NOT_RUN`, HIGH에 `TEST_DELEGATION` 전달
+- 다음 순서: H-G1 수신 → BASELINE_ACK → 승인 contract 적용 → 재시험 → HANDOFF revision → HIGH의 RECEIVED/ACCEPTED
+
 ### 1. 결론과 현재 브랜치 상태
 
 | 구분 | 코드 기준 SHA | 상태 |
 | --- | --- | --- |
-| `master` | `b4180e8` | LAPTOP_1 Navigation v1 반영 완료 |
-| `jioni` | `2e94bf4` | v1 전체 + Navigation v2 코드 보강 완료, 최신 `origin/jioni`에 본 보고서 포함 |
+| `master` | `4809f24` | Navigation v1과 최신 Git 협업 컨벤션 반영 |
+| `jioni` | `9b6108c` | v1/v2 PRE-G1 산출물과 워크플로우 정상화 기록 |
+| `feat/sl-nav-v2` | `ce418b0` | 독립 결함 수정, Draft PR #7 검토 대기 |
 | v1 이전 master | `8de49a1` | 기존 팀 문서 기준점, 이력 보존 |
 
 - v1은 `master`에 fast-forward로 반영했습니다. force push, reset, 기존 파일 삭제는 수행하지 않았습니다.
-- v2 코드는 `jioni`에만 있습니다. `master..jioni`의 코드 차이는 v2 기능 커밋 `2e94bf4`이며 나머지는 v2 보고용 README 커밋입니다.
+- v2 코드는 `jioni` 계열에만 있습니다. `master..jioni`의 핵심 코드 차이는 v2 기능 커밋 `2e94bf4`입니다.
 - 현재 작업 영역은 Navigation 패키지와 대응 테스트입니다. Activity, Manifest, Gradle, WebView, Pleos Vehicle 코드는 변경하지 않았습니다.
 - `docs/team/BASELINE.md`의 공통 contract gate는 아직 `NOT_READY`입니다. Navigation 내부 DTO를 승인된 공통 contract로 오인하지 마세요.
 

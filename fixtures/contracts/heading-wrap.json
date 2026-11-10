@@ -1,0 +1,6 @@
+{
+  "fromDeg": 359,
+  "toDeg": 1,
+  "expectedDeltaDeg": 2,
+  "toleranceDeg": 0.1
+}

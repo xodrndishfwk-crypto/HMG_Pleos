@@ -1,0 +1,10 @@
+app/src/main/java/com/example/starlog2/contracts/*.kt text eol=lf
+app/src/main/java/com/example/starlog2/platform/AndroidClock.kt text eol=lf
+app/src/main/java/com/example/starlog2/integration/NavigationContractAdapter.kt text eol=lf
+app/src/test/java/com/example/starlog2/contracts/*.kt text eol=lf
+app/src/androidTest/java/com/example/starlog2/contracts/*.kt text eol=lf
+app/build.gradle.kts text eol=lf
+fixtures/contracts/*.json text eol=lf
+docs/g1/MANIFEST.json text eol=lf
+tools/Verify-G1.ps1 text eol=lf
+.gitattributes text eol=lf

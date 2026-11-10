@@ -44,16 +44,32 @@ adb shell am start -n com.example.starlog2/.MainActivity
 
 APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차량 API 연동 성공은 Pleos AVD에서 실제 성공 콜백과 반환값을 확인한 뒤 판단합니다.
 
-## Git 브랜치 컨벤션
+## Git 브랜치 및 협업 컨벤션
 
-- `master`: 검증된 통합 결과만 유지하는 기본 브랜치입니다. 직접 개발하거나 force push하지 않습니다.
-- `jioni`: 이 노트북에서 작업하는 개인 개발 브랜치입니다. 현재 내비게이션 코어 구현은 이 브랜치에서 진행합니다.
-- `integration/<기능>-v<버전>`: 여러 담당자의 기능을 합쳐 검증하는 통합 브랜치입니다. 예: `integration/starlog-v1`.
-- `feat/<기능>-v<버전>`: 독립 기능 개발 브랜치입니다. 예: `feat/sl-nav-v1`, `feat/sl-memory-v1`.
-- `fix/<기능>-<설명>`: 확인된 결함 수정 브랜치입니다. 예: `fix/navigation-off-route`.
+3대 장비(HIGH_PC, LAPTOP_1, LAPTOP_2)가 충돌 없이 병렬로 작업하기 위한 공통 규칙입니다.
+
+### 1. 브랜치 규칙
+- `master`: 최종 검증된 통합 결과만 유지하는 기본 브랜치입니다. 코드 구현을 직접 병합하거나 `force push`하지 않습니다.
+- `integration/<기능>-v<버전>`: 여러 담당자의 기능을 합쳐 검증하는 통합 브랜치입니다 (`integration/starlog-v1`). **모든 기능 PR의 Base 브랜치**입니다.
+- `jioni` / `seobice`: 각 노트북 담당자(LAPTOP_1 내비게이션 코어, LAPTOP_2 스타로그 도메인)의 작업 브랜치입니다.
+- `feat/<기능>-v<버전>`: 독립 기능 개발 브랜치입니다. 예: `feat/sl-nav-v1`, `feat/sl-memory-v1`, `feat/sl-renderer-v1`, `feat/sl-platform-v1`.
+- `fix/<기능>-<설명>`: 확인된 결함 수정 브랜치입니다. 예: `fix/navigation-off-route`, `fix/starlog-heading-wrap`.
 - `docs/<설명>` 및 `chore/<설명>`: 문서와 빌드·설정·정리 작업에 사용합니다.
 
-브랜치는 최신 기준 브랜치에서 만들고, 커밋 메시지는 `feat(navigation): ...`, `fix(navigation): ...`, `test(navigation): ...`, `docs(readme): ...`처럼 `<type>(<scope>): <summary>` 형식을 사용합니다. 기능 브랜치는 PR로 통합하며 `master`에는 직접 병합하지 않습니다.
+### 2. 담당 경로 스테이징 규칙 (`git add .` 금지)
+다른 담당자의 작업이나 공유 설정이 섞이지 않도록 **`git add .` 대신 본인 소유 경로만 지정해서 스테이징**합니다.
+- **HIGH_PC (Manager / 화면 / 센서)**: `contracts/**`, `integration/**`, `platform/**`, `MainActivity`, WebGL/assets, `build.gradle.kts`, `AndroidManifest.xml`, `docs/**`
+- **LAPTOP_1 (`jioni`)**: `app/src/{main,test}/java/com/example/starlog2/navigation/**`
+- **LAPTOP_2 (`seobice`)**: `app/src/{main,test,androidTest}/java/com/example/starlog2/starlog/**`
+- **커밋 제외 대상**: `*.jks`(서명키), `*.apk`, `local.properties`, `.gradle/`, `build/` 및 타인 담당 파일. 공유 설정이나 의존성 변경이 필요하면 직접 커밋하지 않고 Manager에게 `CHANGE_REQUEST`로 먼저 요청합니다.
+
+### 3. 커밋 메시지 규칙
+- 형식: `<type>(<scope>): <summary>` (현재형, 50자 이내)
+- `<type>`: `feat`(기능), `fix`(버그), `test`(테스트), `refactor`(구조 개선), `docs`(문서), `chore`(설정/기타)
+- `<scope>`: `navigation`, `starlog`, `contracts`, `renderer`, `platform`, `readme`, `team`
+- 예시: `feat(navigation): ...`, `feat(starlog): ...`, `test(starlog): ...`, `docs(readme): ...`
+
+새 브랜치는 항상 `git fetch origin` 후 최신 기준 브랜치에서 분기하며, 단위 테스트 통과와 스테이징 파일(`git diff --cached --name-only`)을 확인한 뒤 PR로 통합합니다.
 
 ## jioni 내비게이션 코어 인수인계 (Manager 노드)
 

@@ -1,0 +1,84 @@
+{
+  "samples": [
+    {
+      "seq": 0,
+      "observedAtMs": 1800000000000,
+      "monotonicMs": 0,
+      "sourceMode": "REPLAY",
+      "providerId": "g1-synthetic",
+      "location": {
+        "value": {
+          "point": {
+            "lat": 37.5,
+            "lon": 127
+          },
+          "accuracyM": 5,
+          "headingDeg": 359,
+          "headingReference": "TRUE_NORTH"
+        },
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "speedMps": {
+        "value": 0,
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "gear": {
+        "value": "P",
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "ignitionOn": {
+        "value": true,
+        "quality": "VALID",
+        "ageMs": 0
+      }
+    },
+    {
+      "seq": 1,
+      "observedAtMs": 1800000180000,
+      "monotonicMs": 180000,
+      "sourceMode": "REPLAY",
+      "providerId": "g1-synthetic",
+      "location": {
+        "value": {
+          "point": {
+            "lat": 37.5,
+            "lon": 127
+          },
+          "accuracyM": 5,
+          "headingDeg": 359,
+          "headingReference": "TRUE_NORTH"
+        },
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "speedMps": {
+        "value": 0,
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "gear": {
+        "value": "P",
+        "quality": "VALID",
+        "ageMs": 0
+      },
+      "ignitionOn": {
+        "value": true,
+        "quality": "VALID",
+        "ageMs": 0
+      }
+    }
+  ],
+  "config": {
+    "stopDurationMs": 180000,
+    "maxAgeMs": 2000,
+    "speedThresholdMps": 0.3
+  },
+  "expected": {
+    "stopElapsedMs": 180000,
+    "mode": "MEMORY_FRAME"
+  },
+  "scope": "proposed-v1-stop-boundary; S implementation must validate separately"
+}

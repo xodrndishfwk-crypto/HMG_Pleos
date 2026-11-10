@@ -55,80 +55,71 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 
 브랜치는 최신 기준 브랜치에서 만들고, 커밋 메시지는 `feat(navigation): ...`, `fix(navigation): ...`, `test(navigation): ...`, `docs(readme): ...`처럼 `<type>(<scope>): <summary>` 형식을 사용합니다. 기능 브랜치는 PR로 통합하며 `master`에는 직접 병합하지 않습니다.
 
-## jioni 내비게이션 코어 인수인계 (Manager 노드)
+## LAPTOP_1 Navigation v1/v2 보고서 (Manager AI용)
 
-### 작업 상태와 기준
+보고 기준: 2026-11-10 KST. 이 절은 Manager AI가 브랜치 상태를 오해하지 않고 검토·통합·실환경 검증을 이어가기 위한 실행 보고서입니다.
 
-| 항목 | 내용 |
+### 1. 결론과 현재 브랜치 상태
+
+| 구분 | 코드 기준 SHA | 상태 |
+| --- | --- | --- |
+| `master` | `b4180e8` | LAPTOP_1 Navigation v1 반영 완료 |
+| `jioni` | `2e94bf4` | v1 전체 + Navigation v2 코드 보강 완료, 최신 `origin/jioni`에 본 보고서 포함 |
+| v1 이전 master | `8de49a1` | 기존 팀 문서 기준점, 이력 보존 |
+
+- v1은 `master`에 fast-forward로 반영했습니다. force push, reset, 기존 파일 삭제는 수행하지 않았습니다.
+- v2 코드는 `jioni`에만 있습니다. `master..jioni`의 코드 차이는 v2 기능 커밋 `2e94bf4`이며 나머지는 v2 보고용 README 커밋입니다.
+- 현재 작업 영역은 Navigation 패키지와 대응 테스트입니다. Activity, Manifest, Gradle, WebView, Pleos Vehicle 코드는 변경하지 않았습니다.
+- `docs/team/BASELINE.md`의 공통 contract gate는 아직 `NOT_READY`입니다. Navigation 내부 DTO를 승인된 공통 contract로 오인하지 마세요.
+
+### 2. 커밋 지도
+
+| 버전 | 커밋 | 목적 | 반영 위치 |
+| --- | --- | --- | --- |
+| v1 | `4f34ee2` | route, geometry, guidance, Replay 코어와 19개 테스트 | `master`, `jioni` |
+| v1 문서 | `aec01ec` | Git 브랜치·커밋 컨벤션 | `master`, `jioni` |
+| v1 인수 | `b4180e8` | Manager 연결 방법과 v1 한계 | `master`, `jioni` |
+| v2 | `2e94bf4` | 네트워크 경계와 진행량 안정성 보강, 총 30개 테스트 | `jioni`만 |
+| v2 문서 | `ecae96d` 이후 README 커밋 | v1/v2 구분, 검증 결과와 본 Manager 보고서 | `jioni`만 |
+
+Manager가 v1을 다시 cherry-pick하면 중복 충돌이 발생할 수 있습니다. v1은 이미 `master`에 있으므로 재적용하지 마세요. v2 채택 시 코드 커밋 `2e94bf4`를 검토·적용하며, 이후 README 커밋은 보고 문서이므로 `master` 반영 대상에서 분리할 수 있습니다.
+
+### 3. v1 구현 결과
+
+| 구성요소 | 구현 내용 |
 | --- | --- |
-| 담당 | LAPTOP_1 / Navigation core |
-| 브랜치 | `jioni` |
-| 기준 master | `8de49a1` |
-| 구현 커밋 | `4f34ee2` (`feat(navigation): implement route guidance and replay core`) |
-| Manager v1 인수 기준 | `b4180e8` (v1 코드·문서 고정점) |
-| LAPTOP_1 v2 커밋 | `2e94bf4` (`feat(navigation): harden route and progress handling`) |
-| 현재 상태 | v1 Manager integration pending / v2 reliability hardening complete |
-| 소유 경로 | `app/src/main/java/com/example/starlog2/navigation/**` 및 대응 unit test |
+| `Polyline6` | decode, truncation·invalid character·overflow·빈/1점 geometry·5만 점 초과 방어 |
+| `NavigationGeometry` | Haversine 거리, true-north bearing, 359°→1° smoothing, 보간, 기본 310m lookahead |
+| `ValhallaRouteProvider` | POST 요청, connect 10초/read 15초 timeout, 2MB 제한, 취소, latest-request-wins, 429 1회 재시도 |
+| Valhalla parser | summary km→m, seconds 유지, polyline6와 maneuver index 검증, 다중 leg는 `UNSUPPORTED_ROUTE` |
+| `DefaultGuidanceEngine` | route 투영, `snappedPoint`, `alongM`, remaining, 다음 maneuver, 이탈·도착 상태 |
+| `ReplayTelemetryProvider` | 결정적 seq/state, `pause`·`resume`·`seek`·`reset`·`stop`, `SourceMode.REPLAY` 유지 |
 
-이 구현은 Activity, Manifest, Gradle, 기존 Pleos Vehicle 코드를 변경하지 않습니다. 현재 저장소의 `docs/team/BASELINE.md`는 `NOT_READY`이고 공통 contract 코드가 아직 없으므로, 제안된 v1 타입을 `com.example.starlog2.navigation` 안에 함께 구현했습니다. Manager는 통합 전에 공통 contract의 실제 타입과 비교하여 중복 DTO를 제거하거나 adapter를 두어야 합니다.
+v1 기본 판정값은 정확도 30m 이하 fix, 이탈 40m 초과 3회, 도착 remaining/endpoint 각각 20m 이하입니다. 낮은 정확도와 no-fix는 이탈 카운터에 포함하지 않으며 route 교체 시 진행·이탈·도착 상태를 초기화합니다.
 
-### v1과 v2 구분
+### 4. v2 변경점과 호환성
 
-- Manager가 먼저 통합할 v1 기준은 `b4180e8`입니다. 경로·geometry·guidance·Replay의 기본 동작과 Manager 인수 문서가 포함됩니다.
-- LAPTOP_1 v2는 `2e94bf4`부터 시작합니다. Manager의 v1 통합을 방해하지 않도록 공통 contract나 Activity는 수정하지 않고 navigation 내부의 신뢰성과 결정적 시험을 보강했습니다.
-- v2에서 다중 leg, UI, WebView protocol 변경, 공통 contract 확정은 수행하지 않습니다. 해당 변경은 Manager 승인과 새 contract version이 필요합니다.
+v2는 새로운 화면 기능이 아니라 v1 Navigation의 신뢰성과 시험 가능성을 강화합니다.
 
-v2에서 완료한 항목은 다음과 같습니다.
+- `ValhallaRouteProvider`에 connection factory, retry sleeper, wall clock 주입 지점을 추가했습니다. 기본 인자가 있으므로 기존 `ValhallaRouteProvider(clientId)` 호출은 그대로 동작합니다.
+- `Retry-After`의 정수 초와 RFC 1123 HTTP-date를 지원합니다. 자동 대기는 1~60초이며 1회만 재시도합니다.
+- HTTP 400/422는 `INVALID_INPUT`, 401/403은 `PERMISSION_DENIED`, 404는 `NO_DATA`, 5xx는 retryable `NETWORK_UNAVAILABLE`로 매핑합니다.
+- cancel-before-run과 latest-request-wins를 네트워크 없이 결정적으로 검증합니다. 취소되거나 구세대인 callback은 소비자에게 전달하지 않습니다.
+- `GuidanceConfig`에 `maximumBacktrackM=15m`, `maximumForwardJumpM=500m`를 추가했습니다. 기본값이 있어 기존 생성 코드는 소스 호환됩니다.
+- 긴 단일 선분, GPS 전후 순간 이동, loop·평행 복귀 경로에서도 진행량이 크게 점프하지 않도록 제한합니다.
+- Replay pause/resume과 동일 timestamp 중복 거부 시험을 추가했습니다.
 
-- HTTP connection factory, retry sleep, wall clock을 주입 가능하게 해 공개 서버 없이 RouteProvider 경계를 검증.
-- `Retry-After`의 초 형식과 RFC 1123 HTTP-date 형식을 지원하고 60초를 초과하는 자동 대기는 거부.
-- HTTP 400/422→`INVALID_INPUT`, 401/403→`PERMISSION_DENIED`, 404→`NO_DATA`, 5xx→retryable `NETWORK_UNAVAILABLE` 매핑.
-- cancel-before-run과 latest-request-wins를 결정적 executor로 검증하여 이전 callback이 소비자에게 전달되지 않음을 확인.
-- `maximumBacktrackM`와 `maximumForwardJumpM`을 추가해 긴 선분에서도 GPS 순간 이동으로 진행량이 크게 되감기거나 앞서가지 않도록 제한.
-- 평행 복귀 경로, Replay pause/resume, 중복 replay timestamp 거부 시험 추가.
+v2는 다중 leg 지원, UI, WebView protocol, Activity, 공통 contract, 실제 센서 adapter를 변경하지 않습니다. 이 범위를 확장하려면 Manager가 contract version과 영향 범위를 먼저 승인해야 합니다.
 
-### 구현된 기능
+### 5. 공개 API와 Manager 연결 원칙
 
-- `Polyline6`: polyline6 decode, 잘린 문자열·잘못된 문자·좌표 overflow·빈/1점 geometry·5만 점 초과 방어.
-- `NavigationGeometry`: Haversine 거리, true-north bearing, 359°→1° wrap smoothing, 경로 보간, 기본 310m lookahead bearing.
-- `ValhallaRouteProvider`: 단일 비동기 요청, 이전 요청 취소 및 late reply 차단, connect 10초/read 15초 timeout, 최대 2MB 응답, HTTP 429 `Retry-After` 1회 재시도.
-- Valhalla 응답의 `trip.summary.length` km→m 변환, 초 단위 유지, polyline6 shape와 maneuver index 검증.
-- v1에서 여러 leg가 오면 첫 leg만 조용히 사용하지 않고 `UNSUPPORTED_ROUTE`로 반환.
-- `DefaultGuidanceEngine`: 현재 위치의 경로 선분 투영, `snappedPoint`/`alongM`/remaining distance·seconds, 다음 maneuver와 거리 계산.
-- loop·평행도로에서 먼 선분으로 갑자기 이동하지 않도록 이전 진행 선분 기준 탐색 window 적용.
-- 정확도 30m 이하 fix에서 경로 이탈 40m 초과가 3회 연속이면 `OFF_ROUTE`; 낮은 정확도는 이탈 카운터에 포함하지 않음.
-- 마지막 along distance와 endpoint distance가 각각 20m 이하이면 `ARRIVED`; route 교체 시 진행·도착·이탈 상태 초기화.
-- `ReplayTelemetryProvider`: fixture 기반 `Telemetry` 생성, `pause`/`resume`/`seek`/`reset`/`stop`, 동일 입력에 동일 seq/state 제공.
-
-초기 임계값은 모두 `GuidanceConfig`로 노출되어 있습니다.
-
-```kotlin
-GuidanceConfig(
-    deviationThresholdM = 40.0,
-    deviationFixCount = 3,
-    maximumAccuracyM = 30.0,
-    arrivalAlongM = 20.0,
-    arrivalEndpointM = 20.0,
-    maximumBacktrackM = 15.0,
-    maximumForwardJumpM = 500.0,
-)
-```
-
-### Manager 연결 예시
-
-`RouteProvider` callback과 telemetry callback은 worker thread에서 들어올 수 있습니다. Manager가 소유한 단일 reducer queue에서 `setRoute`와 `update`를 직렬화해야 합니다.
+주요 API는 `RouteProvider.request`, `GuidanceEngine.setRoute/update/clear`, `ReplayTelemetryProvider.start/stop/pause/resume/seek/reset`입니다. `RouteProvider`와 telemetry callback은 worker thread에서 호출될 수 있으므로 Manager의 단일 reducer queue에서 모든 상태 변경을 직렬화해야 합니다.
 
 ```kotlin
 val routeProvider = ValhallaRouteProvider(clientId = "starlog-android")
 val guidanceEngine: GuidanceEngine = DefaultGuidanceEngine()
 
-val cancelHandle = routeProvider.request(
-    RouteRequest(
-        requestId = "route-42",
-        start = LatLon(37.497952, 127.027619),
-        end = LatLon(37.504501, 127.048962),
-    ),
-) { outcome ->
+val cancelHandle = routeProvider.request(routeRequest) { outcome ->
     reducerExecutor.execute {
         when (outcome) {
             is Outcome.Ok -> guidanceEngine.setRoute(outcome.value)
@@ -139,52 +130,52 @@ val cancelHandle = routeProvider.request(
 
 fun onTelemetry(sample: Telemetry) {
     reducerExecutor.execute {
-        val guidanceState = guidanceEngine.update(sample)
-        renderGuidance(guidanceState)
+        renderGuidance(guidanceEngine.update(sample))
     }
 }
-
-// Activity/session 종료 또는 새 요청으로 교체할 때
-cancelHandle.cancel()
-routeProvider.close()
 ```
 
-Replay도 같은 `Telemetry` 입력 경로에 연결합니다. Replay 결과를 실차 입력으로 표시하지 말고 `sourceMode == SourceMode.REPLAY`를 RenderState까지 유지해야 합니다.
+Replay와 live adapter는 동일한 `onTelemetry` 경로를 사용하되 `SourceMode`를 바꾸지 않습니다. 웹 좌표는 반드시 `[lon, lat]`로 변환하고, Kotlin `LatLon`은 `lat/lon` 순서를 유지합니다.
 
-```kotlin
-val replay = ReplayTelemetryProvider(frames = recordedFrames)
-replay.start(
-    onSample = ::onTelemetry,
-    onError = ::renderNavigationError,
-)
-```
+### 6. Manager AI 필수 작업
 
-### 통합 시 Manager가 해야 할 작업
-
-1. 공통 contract가 확정되면 `NavigationModels.kt`의 타입을 공통 타입으로 교체하거나 명시적 adapter를 추가합니다.
-2. Vehicle/live location adapter와 Replay가 모두 같은 reducer queue로 `Telemetry`를 전달하게 합니다.
-3. `GuidanceState`를 전체 RenderState의 `guidance`에 넣고, route geometry는 웹 좌표 순서 `[lon, lat]`로 변환합니다.
-4. `OFF_ROUTE` 수신 시 Manager가 최소 5초 debounce 후 새 route 요청을 만들며, 매 telemetry tick마다 API를 호출하지 않습니다.
-5. Activity/session 수명에 맞춰 `CancelHandle.cancel()`, `ReplayTelemetryProvider.stop()`, `ValhallaRouteProvider.close()`를 호출합니다.
-6. Pleos 실제 위치 입력과 WebView를 연결한 뒤 route 좌표 정합, maneuver 전후, 도착 1회, 이탈 후 재탐색을 통합 시험합니다.
-
-### 검증 결과와 현재 한계
-
-- Java 25의 Kotlin/JVM 컴파일: 성공.
-- navigation JUnit 4 테스트: `OK (30 tests)`.
-- 검증 시나리오: polyline 오류, 거리·방위 wrap, 90도 회전, remaining, low accuracy/no fix, 3회 이탈, 도착 유지, route 교체, 장거리 전후 GPS 순간 이동, 평행 복귀 경로, Replay 결정성·pause/resume, Valhalla km→m·단일 leg·maneuver index·429·timeout·cancel·latest reply·HTTP 오류 매핑.
-- 이 노트북에는 Android SDK 위치가 없어 `:app:testDebugUnitTest`와 `:app:lintDebug`는 이번 변경에서 `NOT_RUN`입니다. Android SDK가 있는 Manager PC에서 재실행해야 합니다.
-- 공개 Valhalla 서버를 사용하는 live route 요청과 Pleos 실차/에뮬레이터 위치 입력은 `NOT_RUN`입니다.
-- remaining seconds는 경로 비용을 진행 거리 비율로 나눈 추정치이며 live traffic ETA가 아닙니다.
-- 경로 투영은 제한된 window의 local projection으로 상용 map matching과 동일하지 않습니다.
-- 자동 429 재시도는 `Retry-After`가 1~60초일 때 한 번만 수행합니다.
-
-Manager PC 권장 검증 명령은 다음과 같습니다.
+1. `NavigationModels.kt`를 승인된 공통 contract와 비교합니다. 동일 DTO를 여러 패키지에 유지하지 말고 공통 타입 교체 또는 명시적 adapter 중 하나를 선택합니다.
+2. `RouteProvider` callback, live telemetry, Replay를 단일 reducer queue로 직렬화합니다.
+3. `GuidanceState`를 RenderState에 연결하고 route geometry를 `[lon, lat]`로 변환합니다.
+4. `OFF_ROUTE` 이후 재탐색은 Manager가 최소 5초 debounce합니다. telemetry tick마다 route API를 호출하지 않습니다.
+5. route 교체·Activity 종료 시 `CancelHandle.cancel()`, Replay 종료 시 `stop()`, session 종료 시 `ValhallaRouteProvider.close()`를 호출합니다.
+6. v2를 채택할 경우 `2e94bf4`의 API 기본값과 HTTP 오류 매핑이 공통 error 정책에 맞는지 검토합니다.
+7. Android SDK와 Pleos 환경에서 아래 검증 명령 및 실환경 시나리오를 실행하고 결과 SHA를 기록합니다.
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest --tests "com.example.starlog2.navigation.*"
 .\gradlew.bat :app:lintDebug
 ```
+
+### 7. 검증 증거
+
+| 대상 | 환경/명령 | 결과 |
+| --- | --- | --- |
+| v1 `b4180e8` | Java 25, Kotlin/JVM 수동 compile + JUnit 4 | `OK (19 tests)` |
+| v2 `2e94bf4` | Java 25, Kotlin/JVM 수동 compile + JUnit 4 | `OK (30 tests)` |
+| Android Gradle unit test | Android SDK 미설치 | `NOT_RUN` |
+| `:app:lintDebug` | Android SDK 미설치 | `NOT_RUN` |
+| 공개 Valhalla live 요청 | recorded/fake boundary 우선 | `NOT_RUN` |
+| Pleos 실제 위치·WebView 연결 | Manager 소유 환경 필요 | `NOT_RUN` |
+
+30개 테스트는 polyline 오류, 거리·방위 wrap, 90도 회전, remaining, low accuracy/no-fix, 3회 이탈, 도착 유지, route 교체, 전후 GPS 순간 이동, 평행 복귀 경로, Replay 결정성·pause/resume, Valhalla km→m·단일 leg·maneuver index·429·timeout·cancel·latest request·HTTP 오류 매핑을 포함합니다.
+
+### 8. 알려진 한계와 금지 사항
+
+- remaining seconds는 거리 비례 추정치이며 live traffic ETA가 아닙니다.
+- route projection은 제한된 window의 local projection이며 상용 map matching이 아닙니다.
+- 다중 leg는 지원하지 않고 `UNSUPPORTED_ROUTE`를 반환합니다.
+- 공개 API를 매 telemetry tick마다 호출하지 않습니다.
+- Replay 결과를 live 측정값으로 표시하지 않습니다.
+- Manager 검증 전 v2를 `master`에 직접 반영하거나 v1을 중복 cherry-pick하지 않습니다.
+- 실제 통합·실환경 검증이 끝나기 전 전체 Navigation 완료로 보고하지 않습니다.
+
+Manager 완료 보고에는 적용한 SHA, contract version/hash, adapter 또는 타입 교체 내역, 테스트 명령과 exit code, live/Replay 구분, Pleos 실환경 결과, known issues를 포함해야 합니다.
 
 ## 현재 검증 결과 (2026-11-07)
 

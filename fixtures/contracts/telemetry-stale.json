@@ -1,0 +1,35 @@
+{
+  "seq": 0,
+  "observedAtMs": 1800000000000,
+  "monotonicMs": 0,
+  "sourceMode": "REPLAY",
+  "providerId": "g1-synthetic",
+  "location": {
+    "value": {
+      "point": {
+        "lat": 37.5,
+        "lon": 127
+      },
+      "accuracyM": 5,
+      "headingDeg": 359,
+      "headingReference": "TRUE_NORTH"
+    },
+    "quality": "STALE",
+    "ageMs": 2001
+  },
+  "speedMps": {
+    "value": null,
+    "quality": "UNAVAILABLE",
+    "ageMs": 2001
+  },
+  "gear": {
+    "value": "P",
+    "quality": "VALID",
+    "ageMs": 0
+  },
+  "ignitionOn": {
+    "value": true,
+    "quality": "VALID",
+    "ageMs": 0
+  }
+}

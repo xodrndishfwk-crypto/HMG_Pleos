@@ -1,5 +1,15 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.AppError
+import com.example.starlog2.contracts.Gear
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.LocationFix
+import com.example.starlog2.contracts.Quality
+import com.example.starlog2.contracts.Reference
+import com.example.starlog2.contracts.SourceMode
+import com.example.starlog2.contracts.Telemetry
+import com.example.starlog2.contracts.TelemetryProvider
+import com.example.starlog2.contracts.TimedValue
 import java.util.concurrent.atomic.AtomicBoolean
 
 data class ReplayFrame(

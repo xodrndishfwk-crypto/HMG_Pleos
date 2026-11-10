@@ -1,5 +1,8 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.Outcome
+
 object Polyline6 {
     const val DEFAULT_MAX_POINTS = 50_000
 
@@ -50,7 +53,11 @@ object Polyline6 {
                 throw IllegalArgumentException("Invalid polyline character")
             }
             val chunk = charCode - 63
-            result = result or ((chunk and 0x1f).toLong() shl shift)
+            val payload = (chunk and 0x1f).toLong()
+            if (shift == 60 && payload > MAX_FINAL_PAYLOAD) {
+                throw IllegalArgumentException("Overflowing polyline value")
+            }
+            result = result or (payload shl shift)
             if (chunk < 0x20) break
             shift += 5
         }
@@ -62,5 +69,6 @@ object Polyline6 {
 
     private data class DecodedValue(val value: Long, val nextIndex: Int)
 
+    private const val MAX_FINAL_PAYLOAD = 0x07L
     private const val SCALE = 1_000_000.0
 }

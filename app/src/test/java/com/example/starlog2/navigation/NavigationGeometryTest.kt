@@ -1,5 +1,6 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.LatLon
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

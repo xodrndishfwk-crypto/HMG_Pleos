@@ -1,5 +1,9 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.Outcome
+import com.example.starlog2.contracts.Route
+import com.example.starlog2.contracts.RouteRequest
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -159,6 +163,15 @@ class ValhallaRouteProviderTest {
             val delay = provider.parseRetryAfterMs("Sun, 19 Jul 2026 13:20:30 GMT")
 
             assertEquals(30_000L, delay)
+        }
+    }
+
+    @Test
+    fun parseRetryAfterMs_extremeSeconds_doesNotOverflowIntoAllowedDelay() {
+        ValhallaRouteProvider("test-client").use { provider ->
+            val delay = provider.parseRetryAfterMs("2066035336255469781")
+
+            assertEquals(0L, delay)
         }
     }
 

@@ -77,7 +77,29 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 - 단위 테스트와 `git diff --cached --name-only` 확인 후 PR 생성
 - 기능 PR은 `integration/starlog-v1`을 Base로 사용하고 HIGH 검증 전 `master`에 직접 반영하지 않음
 
-## LAPTOP_1 Navigation v1/v2 보고서 (Manager AI용)
+## LAPTOP_1 Navigation 현재 진행 상황
+
+| 항목 | 현재 값 |
+| --- | --- |
+| 갱신일 | 2026-11-10 KST |
+| 담당 장비 | LAPTOP_1 |
+| 작업 브랜치 | `jioni` |
+| Navigation 전달 버전 | `N2-G1-r1` |
+| 공통 계약 버전 | `starlog-contracts-1.0.0` |
+| 승인 BASE_SHA | `551079298c10c88b6e43ac212d95045b3904233b` |
+| 구현 SHA | `5df4a55c2e95972650d055309f2aa8ecfd6963c0` |
+| 통합 대상 PR | [#12](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/12) |
+| LAPTOP_1 구현 진행률 | **100%** — 기준 ACK, 구현, 시험 코드, PR, 인수인계 완료 |
+| 통합 인수 진행률 | **4/6 단계(67%)** — HIGH 공유 코드 정리·Android 검증·병합 대기 |
+| 현재 판정 | `HANDOFF_READY`; `ACCEPTED/INTEGRATED/DONE` 아님 |
+
+이번 버전에서는 Navigation 자체 DTO·enum·interface를 제거하고 canonical contracts를 직접 사용하도록 이전했습니다. 기존 v2 진행량 안정화, timeout/cancel/429/off-route/arrival/Replay 회귀 동작을 유지했으며 Retry-After 극단값 및 polyline high-bit overflow를 보강했습니다. Navigation 시험은 v2 회귀 31개와 polyline overflow 1개로 총 32개입니다.
+
+G1 manifest 27개와 SHA-256은 검증 통과했습니다. 이 장비에는 Android SDK가 없어 Gradle Navigation/lint 검사는 `NOT_RUN`이며 HIGH_PC에 `TEST_DELEGATION`을 전달했습니다. 상세 변경, 검증 명령, 제약 및 Manager 다음 행동은 [`docs/LAPTOP_1_NAVIGATION_G1_REPORT.md`](docs/LAPTOP_1_NAVIGATION_G1_REPORT.md)를 확인합니다.
+
+## LAPTOP_1 Navigation v1/v2 과거 PRE-G1 이력
+
+아래 내용은 G1 승인 전 기록을 보존한 역사 자료입니다. 현재 상태 판단에는 위의 “LAPTOP_1 Navigation 현재 진행 상황”과 최신 G1 보고서를 우선 적용합니다.
 
 보고 기준: 2026-11-10 KST. 이 절은 Manager AI가 브랜치 상태를 오해하지 않고 검토·통합·실환경 검증을 이어가기 위한 실행 보고서입니다.
 

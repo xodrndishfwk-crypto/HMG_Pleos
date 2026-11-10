@@ -1,0 +1,80 @@
+{
+  "valid": [
+    {
+      "version": 1,
+      "type": "ready",
+      "messageId": "event-1",
+      "payload": {
+        "rendererVersion": "1",
+        "webgl": true
+      }
+    },
+    {
+      "version": 1,
+      "type": "ack",
+      "messageId": "event-1",
+      "payload": {
+        "receivedMessageId": "render-42",
+        "seq": 42
+      }
+    },
+    {
+      "version": 1,
+      "type": "userAction",
+      "messageId": "event-1",
+      "payload": {
+        "action": "SELECT_MEMORY",
+        "starId": "s"
+      }
+    },
+    {
+      "version": 1,
+      "type": "error",
+      "messageId": "event-1",
+      "payload": {
+        "code": "WEBGL_CONTEXT_LOST",
+        "messageKey": "map.unavailable",
+        "retryable": true,
+        "requestId": null
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "version": 2,
+      "type": "ready",
+      "messageId": "event-1",
+      "payload": {
+        "rendererVersion": "1",
+        "webgl": true
+      }
+    },
+    {
+      "version": 1,
+      "type": "userAction",
+      "messageId": "event-1",
+      "payload": {
+        "action": "BAD",
+        "starId": null
+      }
+    },
+    {
+      "version": 1,
+      "type": "userAction",
+      "messageId": "event-1",
+      "payload": {
+        "action": "SELECT_MEMORY",
+        "starId": null
+      }
+    },
+    {
+      "version": 1,
+      "type": "ack",
+      "messageId": "event-1",
+      "payload": {
+        "receivedMessageId": "x",
+        "seq": 9007199254740992
+      }
+    }
+  ]
+}

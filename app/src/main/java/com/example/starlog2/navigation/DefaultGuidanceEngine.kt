@@ -1,5 +1,13 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.GuidanceEngine
+import com.example.starlog2.contracts.GuidanceState
+import com.example.starlog2.contracts.GuidanceStatus
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.Maneuver
+import com.example.starlog2.contracts.Quality
+import com.example.starlog2.contracts.Route
+import com.example.starlog2.contracts.Telemetry
 import kotlin.math.max
 
 data class GuidanceConfig(

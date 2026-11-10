@@ -1,5 +1,16 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.Gear
+import com.example.starlog2.contracts.GuidanceStatus
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.LocationFix
+import com.example.starlog2.contracts.Maneuver
+import com.example.starlog2.contracts.Quality
+import com.example.starlog2.contracts.Reference
+import com.example.starlog2.contracts.Route
+import com.example.starlog2.contracts.SourceMode
+import com.example.starlog2.contracts.Telemetry
+import com.example.starlog2.contracts.TimedValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

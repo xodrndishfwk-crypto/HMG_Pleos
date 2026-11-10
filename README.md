@@ -44,6 +44,17 @@ adb shell am start -n com.example.starlog2/.MainActivity
 
 APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차량 API 연동 성공은 Pleos AVD에서 실제 성공 콜백과 반환값을 확인한 뒤 판단합니다.
 
+## Git 브랜치 컨벤션
+
+- `master`: 검증된 통합 결과만 유지하는 기본 브랜치입니다. 직접 개발하거나 force push하지 않습니다.
+- `jioni`: 이 노트북에서 작업하는 개인 개발 브랜치입니다. 현재 내비게이션 코어 구현은 이 브랜치에서 진행합니다.
+- `integration/<기능>-v<버전>`: 여러 담당자의 기능을 합쳐 검증하는 통합 브랜치입니다. 예: `integration/starlog-v1`.
+- `feat/<기능>-v<버전>`: 독립 기능 개발 브랜치입니다. 예: `feat/sl-nav-v1`, `feat/sl-memory-v1`.
+- `fix/<기능>-<설명>`: 확인된 결함 수정 브랜치입니다. 예: `fix/navigation-off-route`.
+- `docs/<설명>` 및 `chore/<설명>`: 문서와 빌드·설정·정리 작업에 사용합니다.
+
+브랜치는 최신 기준 브랜치에서 만들고, 커밋 메시지는 `feat(navigation): ...`, `fix(navigation): ...`, `test(navigation): ...`, `docs(readme): ...`처럼 `<type>(<scope>): <summary>` 형식을 사용합니다. 기능 브랜치는 PR로 통합하며 `master`에는 직접 병합하지 않습니다.
+
 ## 현재 검증 결과 (2026-11-07)
 
 - Gradle 9.6.0 / JDK 25.0.4 실행 확인

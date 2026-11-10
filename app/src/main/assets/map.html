@@ -4,10 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <link rel="stylesheet" href="maplibre-gl.css" />
+  <script>
+    const sessionId = Number(new URLSearchParams(location.search).get('session') || 0);
+    function reportMapError(fatal) {
+      if (window.Android) Android.onMapError(sessionId, fatal);
+    }
+    window.addEventListener('error', () => reportMapError(true));
+    window.addEventListener('unhandledrejection', () => reportMapError(true));
+  </script>
   <script src="maplibre-gl.js"></script>
   <style>
     html,body,#map { width:100%; height:100%; margin:0; overflow:hidden; background:#8bc9ee; }
-    .maplibregl-ctrl-bottom-right { bottom: 112px; }
+    .maplibregl-ctrl-bottom-right { bottom: calc(var(--overlay-inset, 140px) + 8px); }
   </style>
 </head>
 <body>
@@ -25,6 +33,15 @@
     antialias: true
   });
 
+  map.on('error', () => reportMapError(!map.isStyleLoaded()));
+  map.on('webglcontextlost', () => reportMapError(true));
+
+  function setOverlayInset(pixels) {
+    if (Number.isFinite(pixels) && pixels >= 0) {
+      document.documentElement.style.setProperty('--overlay-inset', pixels + 'px');
+    }
+  }
+
   map.on('load', () => {
     map.getStyle().layers
       .filter(layer => layer.type === 'fill-extrusion')
@@ -37,7 +54,7 @@
       'horizon-fog-blend': 0.55,
       'fog-ground-blend': 0.65
     });
-    if (window.Android) Android.onMapReady();
+    if (window.Android) Android.onMapReady(sessionId);
   });
 
   function showRoute(payload) {

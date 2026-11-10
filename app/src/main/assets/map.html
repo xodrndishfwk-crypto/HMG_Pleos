@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link rel="stylesheet" href="maplibre-gl.css" />
+  <script>
+    const sessionId = Number(new URLSearchParams(location.search).get('session') || 0);
+    function reportMapError(fatal) {
+      if (window.Android) Android.onMapError(sessionId, fatal);
+    }
+    window.addEventListener('error', () => reportMapError(true));
+    window.addEventListener('unhandledrejection', () => reportMapError(true));
+  </script>
+  <script src="maplibre-gl.js"></script>
+  <style>
+    html,body,#map { width:100%; height:100%; margin:0; overflow:hidden; background:#8bc9ee; }
+    .maplibregl-ctrl-bottom-right { bottom: calc(var(--overlay-inset, 140px) + 8px); }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: 'https://tiles.openfreemap.org/styles/liberty',
+    center: [127.027619, 37.497952],
+    zoom: 17.7,
+    pitch: 76,
+    bearing: 78,
+    maxPitch: 85,
+    attributionControl: true,
+    antialias: true
+  });
+
+  map.on('error', () => reportMapError(!map.isStyleLoaded()));
+  map.on('webglcontextlost', () => reportMapError(true));
+
+  function setOverlayInset(pixels) {
+    if (Number.isFinite(pixels) && pixels >= 0) {
+      document.documentElement.style.setProperty('--overlay-inset', pixels + 'px');
+    }
+  }
+
+  map.on('load', () => {
+    map.getStyle().layers
+      .filter(layer => layer.type === 'fill-extrusion')
+      .forEach(layer => map.setLayoutProperty(layer.id, 'visibility', 'none'));
+    map.setSky({
+      'sky-color': '#68b9ed',
+      'horizon-color': '#f4fbff',
+      'fog-color': '#d8edf7',
+      'sky-horizon-blend': 0.42,
+      'horizon-fog-blend': 0.55,
+      'fog-ground-blend': 0.65
+    });
+    if (window.Android) Android.onMapReady(sessionId);
+  });
+
+  function showRoute(payload) {
+    const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const geojson = {
+      type: 'Feature', properties: {},
+      geometry: { type: 'LineString', coordinates: data.coordinates }
+    };
+    if (map.getSource('route')) {
+      map.getSource('route').setData(geojson);
+    } else {
+      map.addSource('route', { type:'geojson', data:geojson, lineMetrics:true });
+      map.addLayer({
+        id:'route-shadow', type:'line', source:'route',
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{'line-color':'#102348','line-width':25,'line-opacity':0.62}
+      });
+      map.addLayer({
+        id:'route-glow', type:'line', source:'route',
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{'line-color':'#3ea1ff','line-width':20,'line-blur':5,'line-opacity':0.65}
+      });
+      map.addLayer({
+        id:'route-main', type:'line', source:'route',
+        layout:{'line-cap':'round','line-join':'round'},
+        paint:{'line-color':'#087dff','line-width':13,'line-opacity':1}
+      });
+    }
+    map.easeTo({
+      center: data.lookAhead,
+      zoom: 17.7,
+      pitch: 76,
+      bearing: data.bearing,
+      padding: {top:0,right:0,bottom:150,left:0},
+      duration: 1000
+    });
+  }
+</script>
+</body>
+</html>

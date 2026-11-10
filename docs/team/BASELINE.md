@@ -1,5 +1,7 @@
 # StarLog 승인 시작 기준
 
+[확실] 최신 인수 상태: N2 core PR6 및 I1 PR14 통합·검증 완료. StarLog PR13은 실제 SQLite LIVE/REPLAY 동일시각 ID 충돌로 REJECTED/미병합이며 수정본 대기다. [최신 보고](HIGH_PC_INTAKE_REPORT.md)를 우선 확인한다. 아래 G1 최초 승인 값은 이력이다. 계약/fixture는 그대로지만 adapter 삭제에 따라 현재 도구26개는 [HARNESS_MANIFEST](../g1/HARNESS_MANIFEST.json), SHA256 a99ecd2e21b0c84717f11b99a7202b5cd3ef844a4a606bf45ce30a9f637cfe48로 별도 승인했다. Verify-G1.ps1로 원본 contract6/fixture13과 현재 도구를 함께 확인한다.
+
 [확실] G1 공통 기반 READY · baselineRevision g1-20261110.1 · 승인 HIGH_PC · 2026-11-10 KST. 공통 코드와 입력의 준비 승인이다. Navigation v2 수락·전체 서비스 완료와 구분한다.
 
 ## 승인 값
@@ -21,10 +23,10 @@
 | code preparation PR | [G0 #1](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/1), [G1 #10](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/10), 둘 다 integration에 병합 |
 | G1 test evidence | [VALIDATION.md](../g1/VALIDATION.md), [승인 검토](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/10#issuecomment-6768560522) |
 | READY 공지 위치 | [총괄 Issue #2](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/2), H-G1-20261110-01 댓글 |
-| L1 issue / 현재 수신 상태 | [#4](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4), BASELINE_ACK 미수신 |
-| L2 issue / 현재 수신 상태 | [#5](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/5), BASELINE_ACK 미수신 |
+| L1 issue / 현재 수신 상태 | [#4](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4), ACK 수신·canonical migration 수락/통합 완료 |
+| L2 issue / 현재 수신 상태 | [#5](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/5), ACK 수신·S2 실제 저장 경계 반려/수정 대기 |
 | 두 담당자의 저장소 접근 | 2026-11-10 사용자 확인: 두 사람 모두 Push 가능 |
-| 기능 수락·최종 통합 | Navigation v2 ACCEPTED 아님 / INTEGRATED 아님 / DONE 아님 |
+| 기능 수락·최종 통합 | Navigation v2 core ACCEPTED/INTEGRATED, 전체서비스 DONE 아님, S2는 REJECTED |
 
 [확실] L1/L2의 ACK는 공지 이후 받는 실제 수신 기록이다. 미수신을 검증 완료로 꾸미지 않는다. G1 READY는 작업 시작 허용이며 담당자 수신 완료를 뜻하지 않는다. 공지 이후 문서만 반영한 integration HEAD는 위 검증 대상 merge SHA의 후손일 수 있다. 각 노드가 fetch 후 실제 HEAD와 승인 SHA의 ancestry를 다시 확인한다.
 

@@ -5,7 +5,11 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URI
+import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
@@ -18,6 +22,11 @@ class ValhallaRouteProvider(
     private val executor: ExecutorService = Executors.newSingleThreadExecutor { task ->
         Thread(task, "starlog-route").apply { isDaemon = true }
     },
+    private val connectionFactory: (URL) -> HttpURLConnection = { url ->
+        url.openConnection() as HttpURLConnection
+    },
+    private val sleeper: (Long) -> Unit = { durationMs -> Thread.sleep(durationMs) },
+    private val wallClockMs: () -> Long = System::currentTimeMillis,
 ) : RouteProvider, AutoCloseable {
     private val endpoint = URI.create(endpoint).toURL()
     private val generation = AtomicLong(0)
@@ -74,7 +83,7 @@ class ValhallaRouteProvider(
                 return Outcome.Err(navigationError("RATE_LIMITED", input.requestId, retryable = true))
             }
             try {
-                Thread.sleep(response.retryAfterMs)
+                sleeper(response.retryAfterMs)
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
                 return Outcome.Err(navigationError("NETWORK_UNAVAILABLE", input.requestId, retryable = true))
@@ -86,7 +95,7 @@ class ValhallaRouteProvider(
     private fun execute(input: RouteRequest, task: RequestTask): HttpOutcome {
         var connection: HttpURLConnection? = null
         return try {
-            connection = endpoint.openConnection() as HttpURLConnection
+            connection = connectionFactory(endpoint)
             task.connection = connection
             connection.requestMethod = "POST"
             connection.connectTimeout = CONNECT_TIMEOUT_MS
@@ -110,7 +119,7 @@ class ValhallaRouteProvider(
             if (status !in 200..299) {
                 connection.errorStream?.use { readBody(it) }
                 return HttpOutcome.Failure(
-                    navigationError("NETWORK_UNAVAILABLE", input.requestId, retryable = status >= 500),
+                    httpError(status, input.requestId),
                 )
             }
             HttpOutcome.Success(connection.inputStream.use(::readBody))
@@ -207,10 +216,31 @@ class ValhallaRouteProvider(
         return output.toString(StandardCharsets.UTF_8.name())
     }
 
-    private fun parseRetryAfterMs(value: String?): Long {
-        val seconds = value?.trim()?.toLongOrNull() ?: return 0L
-        if (seconds <= 0 || seconds > MAX_RETRY_AFTER_SECONDS) return 0L
-        return seconds * 1_000L
+    internal fun parseRetryAfterMs(value: String?): Long {
+        val normalized = value?.trim()?.takeIf { it.isNotEmpty() } ?: return 0L
+        val seconds = normalized.toLongOrNull()
+        if (seconds != null) return validRetryDelay(seconds * 1_000L)
+        return try {
+            val retryAtMs = ZonedDateTime.parse(normalized, DateTimeFormatter.RFC_1123_DATE_TIME)
+                .toInstant()
+                .toEpochMilli()
+            validRetryDelay(retryAtMs - wallClockMs())
+        } catch (_: DateTimeParseException) {
+            0L
+        }
+    }
+
+    private fun validRetryDelay(durationMs: Long): Long {
+        return if (durationMs in 1..MAX_RETRY_AFTER_MS) durationMs else 0L
+    }
+
+    private fun httpError(status: Int, requestId: String): AppError {
+        return when (status) {
+            400, 422 -> navigationError("INVALID_INPUT", requestId)
+            401, 403 -> navigationError("PERMISSION_DENIED", requestId)
+            404 -> navigationError("NO_DATA", requestId)
+            else -> navigationError("NETWORK_UNAVAILABLE", requestId, retryable = status >= 500)
+        }
     }
 
     private fun invalidResponse(requestId: String): Outcome.Err =
@@ -251,7 +281,7 @@ class ValhallaRouteProvider(
         const val HTTP_TOO_MANY_REQUESTS = 429
         const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
         const val MAX_RATE_LIMIT_RETRIES = 1
-        const val MAX_RETRY_AFTER_SECONDS = 60L
+        const val MAX_RETRY_AFTER_MS = 60_000L
         const val METERS_PER_KILOMETER = 1_000.0
     }
 }

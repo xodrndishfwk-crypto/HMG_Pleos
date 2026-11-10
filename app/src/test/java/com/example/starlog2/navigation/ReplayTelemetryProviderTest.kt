@@ -1,6 +1,11 @@
 package com.example.starlog2.navigation
 
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReplayTelemetryProviderTest {
@@ -27,6 +32,45 @@ class ReplayTelemetryProviderTest {
         assertEquals(1, result.size)
         assertEquals(2L, result.single().seq)
         assertEquals(Gear.P, result.single().gear.value)
+    }
+
+    @Test
+    fun start_pauseResume_doesNotEmitWhilePausedAndContinuesFromPosition() {
+        val clockMs = AtomicLong(0L)
+        val samples = CopyOnWriteArrayList<Telemetry>()
+        val firstSample = CountDownLatch(1)
+        val secondSample = CountDownLatch(1)
+        val provider = ReplayTelemetryProvider(
+            frames = frames(),
+            clock = ReplayClock(clockMs::get),
+            tickMs = 1L,
+        )
+        provider.start(
+            onSample = { sample ->
+                samples += sample
+                if (sample.seq == 1L) firstSample.countDown()
+                if (sample.seq == 2L) secondSample.countDown()
+            },
+            onError = { throw AssertionError(it) },
+        )
+        assertTrue(firstSample.await(1, TimeUnit.SECONDS))
+
+        provider.pause()
+        clockMs.set(1_000L)
+        Thread.sleep(20L)
+        assertEquals(1, samples.size)
+
+        provider.resume()
+        clockMs.set(2_000L)
+        assertTrue(secondSample.await(1, TimeUnit.SECONDS))
+        provider.stop()
+
+        assertEquals(listOf(1L, 2L), samples.map { it.seq })
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun constructor_duplicateOffsets_rejectsAmbiguousReplayOrder() {
+        ReplayTelemetryProvider(listOf(frames().first(), frames().first()))
     }
 
     private fun frames(): List<ReplayFrame> = listOf(

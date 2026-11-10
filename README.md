@@ -65,10 +65,27 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 | 브랜치 | `jioni` |
 | 기준 master | `8de49a1` |
 | 구현 커밋 | `4f34ee2` (`feat(navigation): implement route guidance and replay core`) |
-| 현재 상태 | Navigation code complete / Activity·화면 integration pending |
+| Manager v1 인수 기준 | `b4180e8` (v1 코드·문서 고정점) |
+| LAPTOP_1 v2 커밋 | `2e94bf4` (`feat(navigation): harden route and progress handling`) |
+| 현재 상태 | v1 Manager integration pending / v2 reliability hardening complete |
 | 소유 경로 | `app/src/main/java/com/example/starlog2/navigation/**` 및 대응 unit test |
 
 이 구현은 Activity, Manifest, Gradle, 기존 Pleos Vehicle 코드를 변경하지 않습니다. 현재 저장소의 `docs/team/BASELINE.md`는 `NOT_READY`이고 공통 contract 코드가 아직 없으므로, 제안된 v1 타입을 `com.example.starlog2.navigation` 안에 함께 구현했습니다. Manager는 통합 전에 공통 contract의 실제 타입과 비교하여 중복 DTO를 제거하거나 adapter를 두어야 합니다.
+
+### v1과 v2 구분
+
+- Manager가 먼저 통합할 v1 기준은 `b4180e8`입니다. 경로·geometry·guidance·Replay의 기본 동작과 Manager 인수 문서가 포함됩니다.
+- LAPTOP_1 v2는 `2e94bf4`부터 시작합니다. Manager의 v1 통합을 방해하지 않도록 공통 contract나 Activity는 수정하지 않고 navigation 내부의 신뢰성과 결정적 시험을 보강했습니다.
+- v2에서 다중 leg, UI, WebView protocol 변경, 공통 contract 확정은 수행하지 않습니다. 해당 변경은 Manager 승인과 새 contract version이 필요합니다.
+
+v2에서 완료한 항목은 다음과 같습니다.
+
+- HTTP connection factory, retry sleep, wall clock을 주입 가능하게 해 공개 서버 없이 RouteProvider 경계를 검증.
+- `Retry-After`의 초 형식과 RFC 1123 HTTP-date 형식을 지원하고 60초를 초과하는 자동 대기는 거부.
+- HTTP 400/422→`INVALID_INPUT`, 401/403→`PERMISSION_DENIED`, 404→`NO_DATA`, 5xx→retryable `NETWORK_UNAVAILABLE` 매핑.
+- cancel-before-run과 latest-request-wins를 결정적 executor로 검증하여 이전 callback이 소비자에게 전달되지 않음을 확인.
+- `maximumBacktrackM`와 `maximumForwardJumpM`을 추가해 긴 선분에서도 GPS 순간 이동으로 진행량이 크게 되감기거나 앞서가지 않도록 제한.
+- 평행 복귀 경로, Replay pause/resume, 중복 replay timestamp 거부 시험 추가.
 
 ### 구현된 기능
 
@@ -92,6 +109,8 @@ GuidanceConfig(
     maximumAccuracyM = 30.0,
     arrivalAlongM = 20.0,
     arrivalEndpointM = 20.0,
+    maximumBacktrackM = 15.0,
+    maximumForwardJumpM = 500.0,
 )
 ```
 
@@ -152,8 +171,8 @@ replay.start(
 ### 검증 결과와 현재 한계
 
 - Java 25의 Kotlin/JVM 컴파일: 성공.
-- navigation JUnit 4 테스트: `OK (19 tests)`.
-- 검증 시나리오: polyline 오류, 거리·방위 wrap, 90도 회전, remaining, low accuracy/no fix, 3회 이탈, 도착 유지, route 교체, Replay 결정성, Valhalla km→m·단일 leg·maneuver index.
+- navigation JUnit 4 테스트: `OK (30 tests)`.
+- 검증 시나리오: polyline 오류, 거리·방위 wrap, 90도 회전, remaining, low accuracy/no fix, 3회 이탈, 도착 유지, route 교체, 장거리 전후 GPS 순간 이동, 평행 복귀 경로, Replay 결정성·pause/resume, Valhalla km→m·단일 leg·maneuver index·429·timeout·cancel·latest reply·HTTP 오류 매핑.
 - 이 노트북에는 Android SDK 위치가 없어 `:app:testDebugUnitTest`와 `:app:lintDebug`는 이번 변경에서 `NOT_RUN`입니다. Android SDK가 있는 Manager PC에서 재실행해야 합니다.
 - 공개 Valhalla 서버를 사용하는 live route 요청과 Pleos 실차/에뮬레이터 위치 입력은 `NOT_RUN`입니다.
 - remaining seconds는 경로 비용을 진행 거리 비율로 나눈 추정치이며 live traffic ETA가 아닙니다.

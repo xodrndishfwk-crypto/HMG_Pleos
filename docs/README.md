@@ -1,6 +1,8 @@
 # StarLog 팀 작업 안내
 [확실] 고사양 PC 1대와 노트북 2대로 함께 개발한다.
 
+[확실] 2026-11-10 G1 공통 기반이 준비되었다. **[integration 브랜치의 승인 기준](https://github.com/xodrndishfwk-crypto/HMG_Pleos/blob/integration/starlog-v1/docs/team/BASELINE.md)**과 [검증 결과](https://github.com/xodrndishfwk-crypto/HMG_Pleos/blob/integration/starlog-v1/docs/g1/VALIDATION.md)를 먼저 확인한다. 시작 코드는 approved SHA, 실제 공지는 [Issue #2](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/2)의 H-G1-20261110-01이다. 노트북은 본인 Issue에 BASELINE_ACK를 남긴 뒤 진행한다. 내비 v2 수락·화면 연결 완료를 뜻하지 않는다.
+
 ## 전체 완성까지의 순서
 [추정] 아래는 앞으로 따라갈 개발 순서다. 완료 표시가 아니라 실행 계획이다.
 

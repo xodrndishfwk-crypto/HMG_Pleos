@@ -124,7 +124,7 @@
     {
       "category": "harness",
       "path": "tools/Verify-G1.ps1",
-      "sha256": "8aafbf894c4767af53161e52465f24f8c48e9a5f1ff3c7e5dec3835a6e3e9d24"
+      "sha256": "c855dc6728f80d34fa3fff8c828f833895054b3caed04de71dddf6e5eab65e15"
     },
     {
       "category": "harness",
@@ -134,7 +134,7 @@
     {
       "category": "harness",
       "path": "app/build.gradle.kts",
-      "sha256": "9b0f86728e7c25068ad9c8e6e5e755698fe8539508465183812c357e80717697"
+      "sha256": "823d709c9cfee97518a670ce47c563341461869aaec84ab19f58abf65faf60f8"
     }
   ]
 }

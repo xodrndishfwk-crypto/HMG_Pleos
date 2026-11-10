@@ -12,6 +12,7 @@ foreach ($group in $groups.Keys) {
     foreach ($item in $groups[$group]) {
         $targetPath = Join-Path $projectRoot $item
         foreach ($file in (Get-ChildItem -LiteralPath $targetPath -File -Recurse | Sort-Object FullName)) {
+            if ([IO.File]::ReadAllBytes($file.FullName) -contains 13) { throw "Hashed files must use LF line endings: $($file.FullName)" }
             $entries += [ordered]@{ category=$group; path=$file.FullName.Substring($projectRoot.Length+1).Replace('\','/'); sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
         }
     }

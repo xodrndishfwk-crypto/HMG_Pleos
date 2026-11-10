@@ -36,7 +36,9 @@ LAPTOP_1 Navigation 구현 자체는 담당 소유 경로와 기능 범위를 �
 | 총괄 Issue | https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/2 |
 | HIGH Issue | https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/3 |
 | L1 Issue | https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4 |
+| 정식 HANDOFF 기록 | https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4#issuecomment-6767327328 |
 | G0 준비 PR | https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/1 |
+| N2 Draft PR | https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/6 |
 | v1 SHA | `b4180e8` |
 | v1 위치 | `master`, `integration/starlog-v1`, `jioni` |
 | HIGH v1 검증 | Android Gradle navigation 19 tests 통과 |
@@ -48,14 +50,15 @@ LAPTOP_1 Navigation 구현 자체는 담당 소유 경로와 기능 범위를 �
 
 ## 4. 정상화 조치
 
-1. 본 감사 문서로 절차 위반과 실제 상태를 Git 이력에 보존합니다.
-2. v1은 이미 HIGH가 Android 환경에서 재검증했으므로 삭제·재적용하지 않고 G1 contract 조정 대상으로 둡니다.
-3. v2는 `WAITING_G1 / DRAFT_REVIEW`로 분류하고 `integration/starlog-v1`에 병합하지 않습니다.
-4. L1 Issue #4에 code SHA, base, 계약 미확정, 테스트, Replay/Mock/LIVE 구분과 다음 행동을 HANDOFF 형식으로 기록합니다.
-5. Android/Pleos 미실행 항목은 TEST_DELEGATION 형식으로 HIGH에 위임합니다.
-6. G1 READY가 게시되면 승인 BASE_SHA/hash를 확인하고 `BASELINE_ACK`를 남깁니다.
-7. 필요하면 HIGH가 지정한 기능 브랜치에 승인 baseline을 반영하고 contract adapter를 작성합니다.
-8. HIGH의 RECEIVED/NEEDS_INFO와 검증 결과 전에는 ACCEPTED, INTEGRATED 또는 DONE으로 상태를 올리지 않습니다.
+1. **완료** — 본 감사 문서로 절차 위반과 실제 상태를 Git 이력에 보존했습니다.
+2. **완료** — v1은 삭제·재적용하지 않고 HIGH가 재검증한 PRE-G1 산출물로 보존했습니다.
+3. **완료** — v2를 `WAITING_G1_DRAFT_REVIEW`로 분류하고 integration/master에는 병합하지 않았습니다.
+4. **완료** — L1 Issue #4에 SHA, 미확정 계약, 시험 결과, 데이터 출처와 다음 행동을 HANDOFF 형식으로 기록했습니다.
+5. **완료** — Android/Pleos 미실행 항목을 Issue #4에서 `TEST_DELEGATION` 형식으로 HIGH에 위임했습니다.
+6. **완료** — `integration/starlog-v1` 대상 Draft PR #6을 만들고 G1 전 병합 금지를 명시했습니다.
+7. **대기** — G1 READY 게시 후 승인 BASE_SHA/hash를 확인하고 `BASELINE_ACK`를 남깁니다.
+8. **대기** — 필요하면 HIGH가 지정한 기능 브랜치에 승인 baseline을 반영하고 contract adapter를 작성합니다.
+9. **대기** — HIGH의 RECEIVED/NEEDS_INFO와 검증 결과 전에는 ACCEPTED, INTEGRATED 또는 DONE으로 상태를 올리지 않습니다.
 
 ## 5. 현재 전달 상태
 

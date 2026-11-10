@@ -7,7 +7,6 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import timber.log.Timber
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -23,14 +22,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import com.example.starlog2.integration.MapLoadSession
-import kotlin.math.*
 
 class GlNavigationActivity : AppCompatActivity() {
     private lateinit var webView: WebView
@@ -38,16 +31,19 @@ class GlNavigationActivity : AppCompatActivity() {
     private lateinit var instruction: TextView
     private lateinit var retryButton: Button
     private lateinit var infoPanel: LinearLayout
-    private val worker = Executors.newSingleThreadExecutor()
+    private lateinit var navigation: com.example.starlog2.integration.NavigationSession
+    private var currentRoute: com.example.starlog2.contracts.RenderRoute? = null
+    private var latestRender: com.example.starlog2.contracts.RenderEnvelope? = null
+    private lateinit var maneuverLabel: TextView
+    private var navigationStarted = false
+    private fun newNavigation() = com.example.starlog2.integration.NavigationSession(
+        com.example.starlog2.navigation.ValhallaRouteProvider("starlog-android"),
+        com.example.starlog2.navigation.DefaultGuidanceEngine(), com.example.starlog2.platform.AndroidClock,
+        { envelope -> runOnUiThread { if (!destroyed) renderNavigation(envelope) } })
     private val handler = Handler(Looper.getMainLooper())
     private val mapSession = MapLoadSession()
     private var destroyed = false
-    private var routeTask: Future<*>? = null
-    @Volatile private var routeGeneration = 0
-    private val connectionLock = Any()
-    private var activeConnection: HttpURLConnection? = null
     private var mapReady = false
-    private var pendingRoute: Route? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +68,7 @@ class GlNavigationActivity : AppCompatActivity() {
             webChromeClient = WebChromeClient()
             addJavascriptInterface(Bridge(), "Android")
         }
+        navigation = newNavigation()
         setContentView(buildUi())
         startMap()
     }
@@ -83,7 +80,8 @@ class GlNavigationActivity : AppCompatActivity() {
             retryButton.visibility = View.GONE
             updateAttributionInset()
             status.setText(R.string.map_ready)
-            pendingRoute?.let(::drawRoute) ?: loadRoute()
+            latestRender?.let(::renderNavigation)
+            if (!navigationStarted) loadRoute()
         }
 
         @JavascriptInterface fun onMapError(token: Int, fatal: Boolean) = runOnUiThread {
@@ -94,9 +92,7 @@ class GlNavigationActivity : AppCompatActivity() {
 
     private fun startMap() {
         if (destroyed) return
-        cancelRoute()
         mapReady = false
-        pendingRoute = null
         val token = mapSession.begin()
         retryButton.visibility = View.GONE
         status.setText(R.string.map_loading)
@@ -111,7 +107,6 @@ class GlNavigationActivity : AppCompatActivity() {
     private fun failMap(token: Int) {
         if (destroyed || !mapSession.fail(token)) return
         mapReady = false
-        cancelRoute()
         status.text = "지도를 불러오지 못했습니다."
         instruction.text = "네트워크를 확인한 뒤 다시 시도해 주세요."
         retryButton.visibility = View.VISIBLE
@@ -136,8 +131,8 @@ class GlNavigationActivity : AppCompatActivity() {
                 cornerRadius = 18*d
                 setColor(Color.argb(242, 0, 91, 210))
             }
-            addView(label("↱  530m", 34f, Color.WHITE))
-            addView(label("테헤란로 방면", 18f, Color.WHITE))
+            maneuverLabel = label("—", 30f, Color.WHITE)
+            addView(maneuverLabel)
         }
         root.addView(banner, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.START).apply {
             val m = (14*d).toInt(); setMargins(m, m, 0, 0)
@@ -147,17 +142,6 @@ class GlNavigationActivity : AppCompatActivity() {
             setOnClickListener { startActivity(Intent(this@GlNavigationActivity, MainActivity::class.java)) }
         }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
             val m = (14*d).toInt(); setMargins(0, m, m, 0)
-        })
-        root.addView(label("▲", 30f, Color.rgb(0,104,232)).apply {
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.WHITE)
-                setStroke((3*d).toInt(), Color.rgb(195,201,210))
-            }
-            elevation = 10*d
-        }, FrameLayout.LayoutParams((62*d).toInt(), (62*d).toInt(), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = (116*d).toInt()
         })
         infoPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -174,6 +158,10 @@ class GlNavigationActivity : AppCompatActivity() {
         infoPanel.addView(status)
         infoPanel.addView(instruction)
         infoPanel.addView(retryButton)
+        infoPanel.addView(Button(this).apply {
+            setText(R.string.replay_start)
+            setOnClickListener { startReplay() }
+        })
         infoPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateAttributionInset() }
         root.addView(infoPanel, FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply {
             val m=(16*d).toInt(); setMargins(m,0,m,m)
@@ -187,111 +175,56 @@ class GlNavigationActivity : AppCompatActivity() {
 
     private fun loadRoute() {
         if (destroyed || !mapReady) return
-        cancelRoute()
-        val token = routeGeneration
+        navigationStarted = true
         retryButton.visibility = View.GONE
         status.setText(R.string.route_loading)
-        instruction.text = "강남역 → 테헤란로"
-        routeTask = worker.submit {
-            try {
-                val route = parseRoute(requestRoute(token))
-                runOnUiThread {
-                    if (!destroyed && token == routeGeneration && mapReady) drawRoute(route)
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    if (destroyed || token != routeGeneration) return@runOnUiThread
-                    Timber.tag("StarlogMap").w("Route request failed: %s", e.javaClass.simpleName)
-                    status.text = "경로를 불러오지 못했습니다."
-                    instruction.text = "네트워크와 경로 서버 상태를 확인하세요."
-                    retryButton.visibility = View.VISIBLE
-                }
-            }
-        }
+        navigation.requestRoute(com.example.starlog2.contracts.RouteRequest("route-${System.nanoTime()}",
+            com.example.starlog2.contracts.LatLon(START.lat, START.lon),
+            com.example.starlog2.contracts.LatLon(END.lat, END.lon)))
     }
 
-    private fun cancelRoute() {
-        routeGeneration += 1
-        routeTask?.cancel(true)
-        routeTask = null
-        synchronized(connectionLock) {
-            activeConnection?.disconnect()
-            activeConnection = null
+    private fun renderNavigation(envelope: com.example.starlog2.contracts.RenderEnvelope) {
+        latestRender = envelope
+        val p = envelope.payload
+        currentRoute = p.route
+        if (!mapReady) return
+        val json = try { com.example.starlog2.contracts.ContractJson.encode(envelope) }
+        catch (_: IllegalArgumentException) {
+            status.setText(R.string.navigation_failed)
+            instruction.setText(R.string.render_too_large)
+            return
         }
+        webView.evaluateJavascript("window.starlog.receive(${JSONObject.quote(json)})", null)
+        if (p.error != null) {
+            status.setText(R.string.navigation_failed)
+            instruction.text = p.error.code
+            retryButton.visibility = View.VISIBLE
+        } else if (p.route != null) {
+            status.text = getString(R.string.navigation_replay_status, p.sourceMode.name)
+            retryButton.visibility = View.GONE
+            instruction.text = p.guidance?.nextInstruction ?: getString(R.string.replay_ready)
+        }
+        maneuverLabel.text = p.guidance?.distanceToManeuverM?.let {
+            getString(R.string.maneuver_distance, it.toInt())
+        } ?: "—"
     }
 
-    private fun requestRoute(token: Int): JSONObject {
-        val body=JSONObject()
-            .put("locations",JSONArray()
-                .put(JSONObject().put("lat",START.lat).put("lon",START.lon).put("type","break"))
-                .put(JSONObject().put("lat",END.lat).put("lon",END.lon).put("type","break")))
-            .put("costing","auto").put("units","kilometers").put("language","ko-KR")
-        val c=(URL(ROUTE_URL).openConnection() as HttpURLConnection).apply {
-            requestMethod="POST"; connectTimeout=10_000; readTimeout=15_000; doOutput=true
-            setRequestProperty("Content-Type","application/json")
-            setRequestProperty("X-Client-Id","starlog-navigation-prototype")
+    private fun startReplay() {
+        val geometry = currentRoute ?: return
+        val points = geometry.coordinates.map { com.example.starlog2.contracts.LatLon(it[1], it[0]) }
+        val total = points.zipWithNext().sumOf { (a,b) -> com.example.starlog2.navigation.NavigationGeometry.distanceM(a,b) }
+        val count = kotlin.math.ceil(total / 20).toInt().coerceAtLeast(1)
+        val wall = System.currentTimeMillis()
+        val frames = (0..count).map { i ->
+            val along = (i * 20.0).coerceAtMost(total)
+            com.example.starlog2.navigation.ReplayFrame(i * 2000L, wall + i * 2000L,
+                com.example.starlog2.navigation.NavigationGeometry.pointAtDistance(points, along), 5.0,
+                com.example.starlog2.navigation.NavigationGeometry.lookAheadBearing(points, along),
+                10.0, com.example.starlog2.contracts.Gear.D, true)
         }
-        synchronized(connectionLock) {
-            check(!Thread.currentThread().isInterrupted && token == routeGeneration)
-            activeConnection = c
-        }
-        return try {
-            c.outputStream.bufferedWriter().use { it.write(body.toString()) }
-            val stream=if(c.responseCode in 200..299)c.inputStream else c.errorStream
-            val response=stream.bufferedReader().use { it.readText() }
-            if(c.responseCode !in 200..299) error("HTTP ${c.responseCode}: $response")
-            JSONObject(response)
-        } finally {
-            c.disconnect()
-            synchronized(connectionLock) { if (activeConnection === c) activeConnection = null }
-        }
-    }
-
-    private fun parseRoute(json: JSONObject): Route {
-        val trip=json.getJSONObject("trip")
-        val summary=trip.getJSONObject("summary")
-        val leg=trip.getJSONArray("legs").getJSONObject(0)
-        val items=leg.getJSONArray("maneuvers")
-        val maneuvers=buildList { for(i in 0 until items.length()) add(items.getJSONObject(i).optString("instruction","안내 정보 없음")) }
-        return Route(decode(leg.getString("shape")),summary.getDouble("length"),summary.getDouble("time"),maneuvers)
-    }
-
-    private fun drawRoute(route: Route) {
-        pendingRoute=null
-        val first=route.points.firstOrNull()?:START
-        val ahead=lookAhead(route.points,310.0)
-        val payload=JSONObject()
-            .put("coordinates",JSONArray().apply { route.points.forEach { put(JSONArray().put(it.lon).put(it.lat)) } })
-            .put("lookAhead",JSONArray().put(ahead.lon).put(ahead.lat))
-            .put("bearing",bearing(first,ahead))
-        webView.evaluateJavascript("showRoute(${JSONObject.quote(payload.toString())})",null)
-        val min=(route.seconds/60).toInt().coerceAtLeast(1)
-        status.text = getString(R.string.route_summary, route.km, min)
-        instruction.text=route.maneuvers.firstOrNull()?:"경로 안내 없음"
-    }
-
-    private fun decode(s:String):List<Point>{
-        val out=ArrayList<Point>(); var i=0; var lat=0L; var lon=0L
-        while(i<s.length){ val a=value(s,i);i=a.second;lat+=a.first;val b=value(s,i);i=b.second;lon+=b.first;out+=Point(lat/1e6,lon/1e6) }
-        return out
-    }
-    private fun value(s:String,start:Int):Pair<Long,Int>{
-        var i=start;var shift=0;var value=0L
-        while(i<s.length){val c=s[i++].code-63;value=value or((c and 31).toLong() shl shift);shift+=5;if(c<32)break}
-        return (if(value and 1L !=0L)(value shr 1).inv() else value shr 1) to i
-    }
-    private fun lookAhead(p:List<Point>,meters:Double):Point{
-        if(p.isEmpty())return START;var total=0.0
-        for(i in 1 until p.size){total+=distance(p[i-1],p[i]);if(total>=meters)return p[i]};return p.last()
-    }
-    private fun distance(a:Point,b:Point):Double{
-        val dy=Math.toRadians(b.lat-a.lat);val dx=Math.toRadians(b.lon-a.lon)
-        val h=sin(dy/2).pow(2)+cos(Math.toRadians(a.lat))*cos(Math.toRadians(b.lat))*sin(dx/2).pow(2)
-        return 12_742_000.0*atan2(sqrt(h),sqrt(1-h))
-    }
-    private fun bearing(a:Point,b:Point):Double{
-        val p1=Math.toRadians(a.lat);val p2=Math.toRadians(b.lat);val dl=Math.toRadians(b.lon-a.lon)
-        return (Math.toDegrees(atan2(sin(dl)*cos(p2),cos(p1)*sin(p2)-sin(p1)*cos(p2)*cos(dl)))+360)%360
+        navigation.attachTelemetry(com.example.starlog2.navigation.ReplayTelemetryProvider(frames,
+            clock = com.example.starlog2.navigation.ReplayClock { com.example.starlog2.platform.AndroidClock.monotonicMs() }),
+            com.example.starlog2.contracts.SourceMode.REPLAY)
     }
 
     override fun onResume(){super.onResume();webView.onResume()}
@@ -300,8 +233,7 @@ class GlNavigationActivity : AppCompatActivity() {
         destroyed = true
         mapSession.close()
         handler.removeCallbacksAndMessages(null)
-        cancelRoute()
-        worker.shutdownNow()
+        navigation.close()
         webView.removeJavascriptInterface("Android")
         webView.stopLoading()
         webView.destroy()
@@ -309,9 +241,7 @@ class GlNavigationActivity : AppCompatActivity() {
     }
 
     private data class Point(val lat:Double,val lon:Double)
-    private data class Route(val points:List<Point>,val km:Double,val seconds:Double,val maneuvers:List<String>)
     private companion object{
-        const val ROUTE_URL="https://valhalla1.openstreetmap.de/route"
         val START=Point(37.497952,127.027619)
         val END=Point(37.504501,127.048962)
     }

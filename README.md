@@ -59,6 +59,8 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 
 보고 기준: 2026-11-10 KST. 이 절은 Manager AI가 브랜치 상태를 오해하지 않고 검토·통합·실환경 검증을 이어가기 위한 실행 보고서입니다.
 
+정식 기술 산출물은 [`docs/LAPTOP_1_NAVIGATION_DELIVERABLE.md`](docs/LAPTOP_1_NAVIGATION_DELIVERABLE.md)를 기준으로 합니다. 이 README는 빠른 인수 판단을 위한 요약입니다.
+
 ### 1. 결론과 현재 브랜치 상태
 
 | 구분 | 코드 기준 SHA | 상태 |

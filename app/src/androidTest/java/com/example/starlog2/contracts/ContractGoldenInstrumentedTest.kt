@@ -2,9 +2,7 @@ package com.example.starlog2.contracts
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.example.starlog2.integration.NavigationContractAdapter
 import com.example.starlog2.navigation.NavigationGeometry
-import com.example.starlog2.navigation.LatLon as LegacyPoint
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -82,21 +80,15 @@ class ContractGoldenInstrumentedTest {
         val geometry = JSONObject(fixture("geometry")); val cases = geometry.getJSONArray("cases")
         repeat(cases.length()) { index ->
             val c = cases.getJSONObject(index); val coordinates = c.getJSONArray("points")
-            fun point(a: JSONArray) = LegacyPoint(a.getDouble(1), a.getDouble(0))
+            fun point(a: JSONArray) = LatLon(a.getDouble(1), a.getDouble(0))
             val points = (0 until coordinates.length()).map { point(coordinates.getJSONArray(it)) }
             val length = points.zipWithNext().sumOf { (a,b) -> NavigationGeometry.distanceM(a,b) }
-            val route = com.example.starlog2.navigation.Route("g", "g", points, length, 60.0, emptyList())
+            val route = Route("g", "g", points, length, 60.0, emptyList())
             val sample = ContractJson.decodeTelemetry(fixture("telemetry-driving"))
             val fix = sample.location.value!!.copy(point = point(c.getJSONArray("sample")).let { LatLon(it.lat, it.lon) })
-            val legacy = com.example.starlog2.navigation.Telemetry(sample.seq, sample.observedAtMs, sample.monotonicMs,
-                com.example.starlog2.navigation.SourceMode.REPLAY, sample.providerId,
-                com.example.starlog2.navigation.TimedValue(com.example.starlog2.navigation.LocationFix(LegacyPoint(fix.point.lat,fix.point.lon),5.0,0.0,
-                    com.example.starlog2.navigation.Reference.TRUE_NORTH),com.example.starlog2.navigation.Quality.VALID,0),
-                com.example.starlog2.navigation.TimedValue(10.0,com.example.starlog2.navigation.Quality.VALID,0),
-                com.example.starlog2.navigation.TimedValue(com.example.starlog2.navigation.Gear.D,com.example.starlog2.navigation.Quality.VALID,0),
-                com.example.starlog2.navigation.TimedValue(true,com.example.starlog2.navigation.Quality.VALID,0))
+            val telemetry = sample.copy(location = TimedValue(fix, Quality.VALID, 0))
             val engine = com.example.starlog2.navigation.DefaultGuidanceEngine(); engine.setRoute(route)
-            val state = NavigationContractAdapter.guidance(engine.update(legacy))
+            val state = engine.update(telemetry)
             assertEquals(c.getString("name"), c.getDouble("expectedAlongM"), state.alongM!!, geometry.getDouble("toleranceM"))
         }
     }

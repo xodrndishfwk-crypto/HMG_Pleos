@@ -1,6 +1,5 @@
 package com.example.starlog2.contracts
 
-import com.example.starlog2.integration.NavigationContractAdapter
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -54,15 +53,14 @@ class ContractHarnessTest {
         reject { Visit("v", "d", null, ContractSamples.point, 2, 1, SourceMode.REPLAY, null) }
         assertEquals("s", ExperienceCommand(ExperienceAction.SELECT_MEMORY, "s").starId)
     }
-    @Test fun adapterPreservesRouteUnitsIndicesAndGuidance() {
-        val r = com.example.starlog2.navigation.Route("r", "q", listOf(
-            com.example.starlog2.navigation.LatLon(37.5, 127.0), com.example.starlog2.navigation.LatLon(37.501, 127.0)),
-            111.2, 30.0, listOf(com.example.starlog2.navigation.Maneuver(0, 0, 1, "직진", null, 111.2, 30.0)))
-        assertEquals(111.2, NavigationContractAdapter.route(r).distanceM, 0.0)
-        assertEquals(1, NavigationContractAdapter.route(r).maneuvers.single().endPointIndex)
-        val guidance = com.example.starlog2.navigation.GuidanceState("r", com.example.starlog2.navigation.GuidanceStatus.ACTIVE,
+    @Test fun canonicalRoutePreservesUnitsIndicesAndGuidance() {
+        val r = Route("r", "q", listOf(LatLon(37.5, 127.0), LatLon(37.501, 127.0)),
+            111.2, 30.0, listOf(Maneuver(0, 0, 1, "직진", null, 111.2, 30.0)))
+        assertEquals(111.2, r.distanceM, 0.0)
+        assertEquals(1, r.maneuvers.single().endPointIndex)
+        val guidance = GuidanceState("r", GuidanceStatus.ACTIVE,
             r.points.first(), 1.0, 110.2, 29.0, 0, "직진", 110.2)
-        assertEquals(GuidanceStatus.ACTIVE, NavigationContractAdapter.guidance(guidance).status)
+        assertEquals(GuidanceStatus.ACTIVE, guidance.status)
     }
     private fun reject(block: () -> Any?) {
         try { block(); fail("Expected invalid contract to be rejected") } catch (_: IllegalArgumentException) { }

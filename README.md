@@ -88,7 +88,7 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 | 공통 계약 버전 | `starlog-contracts-1.0.0` |
 | 승인 BASE_SHA | `551079298c10c88b6e43ac212d95045b3904233b` |
 | 구현 SHA | `5df4a55c2e95972650d055309f2aa8ecfd6963c0` |
-| 통합 대상 PR | [#12](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/12) |
+| 통합 대상 PR | [#6](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/6) |
 | LAPTOP_1 구현 진행률 | **100%** — 기준 ACK, 구현, 시험 코드, PR, 인수인계 완료 |
 | 통합 인수 진행률 | **4/6 단계(67%)** — HIGH 공유 코드 정리·Android 검증·병합 대기 |
 | 현재 판정 | `HANDOFF_READY`; `ACCEPTED/INTEGRATED/DONE` 아님 |

@@ -7,13 +7,13 @@
 | 보고 버전 | `N2-G1-r1` |
 | 작성일 | 2026-11-10 KST |
 | 송신 / 수신 | LAPTOP_1 / HIGH_PC Manager Node |
-| 작업 브랜치 | `feat/sl-nav-v2-contracts` → `jioni` |
+| 작업 브랜치 | `jioni` |
 | 구현 SHA | `5df4a55c2e95972650d055309f2aa8ecfd6963c0` |
 | integration 기준 SHA | `a5eda671d6b371c94bbefb46c2d0825756875e34` |
 | 승인 BASE_SHA | `551079298c10c88b6e43ac212d95045b3904233b` |
 | 계약 버전 | `starlog-contracts-1.0.0` |
 | manifest SHA-256 | `f9601d5928d5615c1c6c878c58e96af1d743e86a9f24b37eb228661f85ccb62b` |
-| PR | [#12](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/12) |
+| PR | [#6](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/6) |
 | 담당 Issue | [#4](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/4) |
 
 ## 2. 진행률과 현재 상태
@@ -31,7 +31,7 @@
 5. 기존 Navigation v2의 진행량 역행·과도한 전진·평행 복귀 경로 방어를 반영했습니다.
 6. timeout, cancel, latest-request-wins, HTTP 오류, 429 1회 재시도, off-route, arrival, Replay 구분 회귀 동작을 유지했습니다.
 7. `ce418b0`의 Retry-After 극단값 overflow 방어와 `2438fe9`의 polyline high-bit overflow 방어를 반영했습니다.
-8. Navigation 소유 경로만 변경한 integration 대상 PR #12를 만들고 Issue #4에 HANDOFF_READY, CHANGE_REQUEST, TEST_DELEGATION을 기록했습니다.
+8. `jioni`를 head로 사용하는 integration 대상 PR #6과 Issue #4에 HANDOFF_READY, CHANGE_REQUEST, TEST_DELEGATION을 기록했습니다.
 
 ## 4. 변경 범위
 
@@ -71,7 +71,7 @@ canonical 이전으로 더 이상 필요하지 않은 HIGH 소유 공유 코드�
 
 ## 7. Manager Node 다음 행동
 
-1. PR #12의 코드 SHA와 계약 버전/hash를 확인합니다.
+1. PR #6의 `jioni` head SHA와 계약 버전/hash를 확인합니다.
 2. 위 CHANGE_REQUEST를 HIGH 소유 경로에 반영합니다.
 3. Android SDK 및 Pleos API34 환경에서 TEST_DELEGATION 명령을 실행합니다.
 4. 실패하면 재현 입력, 기대/실제, 정확한 SHA를 Issue #4에 `REJECTED`로 기록합니다.

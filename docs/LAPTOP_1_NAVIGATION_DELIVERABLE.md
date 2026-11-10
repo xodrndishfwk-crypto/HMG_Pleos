@@ -10,10 +10,12 @@
 
 LAPTOP_1은 경로 요청, polyline6 geometry, 주행 진행, 회전 안내, 경로 이탈, 도착 판정과 Replay telemetry를 구현했습니다. v1은 `master`에 반영됐고, v2는 `jioni`에서 네트워크 경계와 진행량 안정성을 추가로 보강했습니다.
 
+> 워크플로우 상태: 이 코드는 G1 `NOT_READY` 상태에서 선행 구현되어 승인 contract 기반 N1/N2 수락을 아직 받지 못했습니다. 저장소 반영과 테스트 통과를 `ACCEPTED`, `INTEGRATED` 또는 `DONE`으로 해석하지 마세요. 상세 감사는 [`LAPTOP_1_WORKFLOW_AUDIT.md`](LAPTOP_1_WORKFLOW_AUDIT.md)를 따릅니다.
+
 | 구분 | 코드 기준 | 상태 |
 | --- | --- | --- |
-| v1 | `master` / `b4180e8` | 반영 완료, Manager 통합·실환경 연결 대기 |
-| v2 | `jioni` / `2e94bf4` | 코드 완료, Manager 검토 전 |
+| v1 | `master` / `b4180e8` | PRE-G1 산출물, HIGH Android 시험 완료, contract 수락 대기 |
+| v2 | `jioni` / `2e94bf4` | WAITING_G1 / Draft review, 병합 금지 |
 | 최신 보고 문서 | 최신 `origin/jioni` | README와 본 문서 |
 | v1 이전 기준 | `8de49a1` | 기존 master 이력으로 보존 |
 
@@ -272,4 +274,4 @@ Manager 환경의 필수 재검증 명령:
 
 ## 15. 최종 상태
 
-LAPTOP_1 기준으로 v1 코드는 master 반영 완료, v2 코드는 jioni에서 구현·JVM 검증 완료입니다. 전체 앱 통합 완료는 Manager가 공통 contract, Android build/lint, 실제 위치와 WebView 연결을 검증한 뒤에만 선언합니다.
+LAPTOP_1 기준으로 v1 코드는 저장소에 존재하고 HIGH Android 시험까지 완료됐지만 G1 승인 contract 기반 N1 수락 기록은 없습니다. v2는 jioni에서 구현·JVM 검증된 `WAITING_G1_DRAFT_REVIEW` 상태입니다. Manager가 G1 기준, HANDOFF 수신, I1 연결, Android/Pleos 검증을 완료하기 전에는 통합 또는 전체 완료로 선언하지 않습니다.

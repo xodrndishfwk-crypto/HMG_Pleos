@@ -61,6 +61,8 @@ APK 생성 경로는 `app/build/outputs/apk/debug/app-debug.apk`입니다. 차�
 
 정식 기술 산출물은 [`docs/LAPTOP_1_NAVIGATION_DELIVERABLE.md`](docs/LAPTOP_1_NAVIGATION_DELIVERABLE.md)를 기준으로 합니다. 이 README는 빠른 인수 판단을 위한 요약입니다.
 
+워크플로우 준수 여부와 정상화 상태는 [`docs/LAPTOP_1_WORKFLOW_AUDIT.md`](docs/LAPTOP_1_WORKFLOW_AUDIT.md)를 먼저 확인하세요. 현재 G1은 `NOT_READY`이며 v2는 `WAITING_G1_DRAFT_REVIEW`입니다.
+
 ### 1. 결론과 현재 브랜치 상태
 
 | 구분 | 코드 기준 SHA | 상태 |

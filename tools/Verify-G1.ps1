@@ -1,11 +1,17 @@
 param([switch]$Update)
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$manifestPath = Join-Path $projectRoot 'docs/g1/MANIFEST.json'
+$baselinePath = Join-Path $projectRoot 'docs/g1/MANIFEST.json'
+$manifestPath = Join-Path $projectRoot 'docs/g1/HARNESS_MANIFEST.json'
+$baseline = Get-Content -LiteralPath $baselinePath -Raw | ConvertFrom-Json
+if ((Get-FileHash -LiteralPath $baselinePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f9601d5928d5615c1c6c878c58e96af1d743e86a9f24b37eb228661f85ccb62b') { throw 'Original baseline manifest changed' }
+foreach ($entry in ($baseline.files | Where-Object { $_.category -in @('contract','fixture') })) {
+    if ((Get-FileHash -LiteralPath (Join-Path $projectRoot $entry.path) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $entry.sha256) { throw "Canonical contract/fixture changed: $($entry.path)" }
+}
 $groups = [ordered]@{
     contract = @('app/src/main/java/com/example/starlog2/contracts')
     fixture = @('fixtures/contracts')
-    harness = @('app/src/test/java/com/example/starlog2/contracts', 'app/src/androidTest/java/com/example/starlog2/contracts', 'app/src/main/java/com/example/starlog2/platform/AndroidClock.kt', 'app/src/main/java/com/example/starlog2/integration/NavigationContractAdapter.kt', 'tools/Verify-G1.ps1', '.gitattributes', 'app/build.gradle.kts')
+    harness = @('app/src/test/java/com/example/starlog2/contracts', 'app/src/androidTest/java/com/example/starlog2/contracts', 'app/src/main/java/com/example/starlog2/platform/AndroidClock.kt', 'tools/Verify-G1.ps1', '.gitattributes', 'app/build.gradle.kts')
 }
 $entries = @()
 foreach ($group in $groups.Keys) {

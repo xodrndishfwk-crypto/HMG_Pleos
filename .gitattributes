@@ -6,5 +6,6 @@ app/src/androidTest/java/com/example/starlog2/contracts/*.kt text eol=lf
 app/build.gradle.kts text eol=lf
 fixtures/contracts/*.json text eol=lf
 docs/g1/MANIFEST.json text eol=lf
+docs/g1/HARNESS_MANIFEST.json text eol=lf
 tools/Verify-G1.ps1 text eol=lf
 .gitattributes text eol=lf

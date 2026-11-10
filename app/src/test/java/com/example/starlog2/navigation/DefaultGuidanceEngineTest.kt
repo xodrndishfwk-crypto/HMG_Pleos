@@ -1,5 +1,16 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.Gear
+import com.example.starlog2.contracts.GuidanceStatus
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.LocationFix
+import com.example.starlog2.contracts.Maneuver
+import com.example.starlog2.contracts.Quality
+import com.example.starlog2.contracts.Reference
+import com.example.starlog2.contracts.Route
+import com.example.starlog2.contracts.SourceMode
+import com.example.starlog2.contracts.Telemetry
+import com.example.starlog2.contracts.TimedValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -86,6 +97,45 @@ class DefaultGuidanceEngineTest {
         assertTrue(state.alongM!! < 1.0)
     }
 
+    @Test
+    fun update_largeBackwardTeleport_doesNotRewindProgress() {
+        val engine = DefaultGuidanceEngine(
+            GuidanceConfig(maximumBacktrackM = 10.0, maximumForwardJumpM = 2_000.0),
+        )
+        engine.setRoute(longStraightRoute())
+        val beforeTeleport = engine.update(telemetry(LatLon(0.015, 0.0)))
+
+        val afterTeleport = engine.update(telemetry(LatLon(0.005, 0.0)).copy(seq = 2))
+
+        assertEquals(beforeTeleport.alongM!!, afterTeleport.alongM!!, 0.1)
+    }
+
+    @Test
+    fun update_largeForwardTeleport_doesNotJumpProgress() {
+        val engine = DefaultGuidanceEngine(
+            GuidanceConfig(maximumBacktrackM = 10.0, maximumForwardJumpM = 300.0),
+        )
+        engine.setRoute(longStraightRoute())
+        val beforeTeleport = engine.update(telemetry(LatLon(0.001, 0.0)))
+
+        val afterTeleport = engine.update(telemetry(LatLon(0.015, 0.0)).copy(seq = 2))
+
+        assertEquals(beforeTeleport.alongM!!, afterTeleport.alongM!!, 0.1)
+    }
+
+    @Test
+    fun update_parallelReturnSegment_doesNotJumpToDistantRouteProgress() {
+        val engine = DefaultGuidanceEngine(
+            GuidanceConfig(forwardSegmentWindow = 3, maximumForwardJumpM = 500.0),
+        )
+        engine.setRoute(parallelReturnRoute())
+        engine.update(telemetry(LatLon(0.0005, 0.0)))
+
+        val state = engine.update(telemetry(LatLon(0.0005, 0.0001)).copy(seq = 2))
+
+        assertTrue(state.alongM!! < 200.0)
+    }
+
     private fun straightRoute(): Route {
         val points = listOf(LatLon(0.0, 0.0), LatLon(0.002, 0.0))
         return Route(
@@ -110,6 +160,43 @@ class DefaultGuidanceEngineTest {
                 Maneuver(0, 0, 1, "직진", 1, 111.2, 20.0),
                 Maneuver(1, 1, 2, "우회전", 10, 111.2, 20.0),
             ),
+        )
+    }
+
+    private fun longStraightRoute(): Route {
+        val points = listOf(LatLon(0.0, 0.0), LatLon(0.02, 0.0))
+        val distanceM = NavigationGeometry.distanceM(points.first(), points.last())
+        return Route(
+            routeId = "long-straight",
+            requestId = "request-long",
+            points = points,
+            distanceM = distanceM,
+            durationS = 180.0,
+            maneuvers = listOf(Maneuver(0, 0, 1, "도착", 4, distanceM, 180.0)),
+        )
+    }
+
+    private fun parallelReturnRoute(): Route {
+        val points = listOf(
+            LatLon(0.0, 0.0),
+            LatLon(0.001, 0.0),
+            LatLon(0.002, 0.0),
+            LatLon(0.003, 0.0),
+            LatLon(0.003, 0.001),
+            LatLon(0.002, 0.001),
+            LatLon(0.001, 0.001),
+            LatLon(0.0, 0.001),
+            LatLon(0.0, 0.0001),
+            LatLon(0.001, 0.0001),
+        )
+        val distanceM = NavigationGeometry.cumulativeDistances(points).last()
+        return Route(
+            routeId = "parallel-return",
+            requestId = "request-parallel",
+            points = points,
+            distanceM = distanceM,
+            durationS = 300.0,
+            maneuvers = listOf(Maneuver(0, 0, points.lastIndex, "도착", 4, distanceM, 300.0)),
         )
     }
 

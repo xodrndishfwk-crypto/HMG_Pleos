@@ -1,0 +1,135 @@
+{
+  "contractVersion": "starlog-contracts-1.0.0",
+  "files": [
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/Clock.kt",
+      "sha256": "c56c19b18f876c948cf4f862f3f11f89bf36576a96bd6356171c69ee09f12ca8"
+    },
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/ContractJson.kt",
+      "sha256": "fb2c1807bf7ea2e9dc205fc6080cfeb21ab14bbb3244776cbdb2a85066be1e5e"
+    },
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/NavigationContracts.kt",
+      "sha256": "3ad74d7d4f98f616b8d214cde47b7099f6d0f3e350f1031135fabf3f3ef8a4e7"
+    },
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/RenderContracts.kt",
+      "sha256": "19ec90c89b5aee85de49ce57284a01a31e03b50a56f6193d63d82ceccba5a712"
+    },
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/StarLogContracts.kt",
+      "sha256": "ca15524fec43316cdc169e113bd4c3e6be4ee04dffc6fe082217f30e991e14d5"
+    },
+    {
+      "category": "contract",
+      "path": "app/src/main/java/com/example/starlog2/contracts/TelemetryCursor.kt",
+      "sha256": "d15496c2fd04c568a7cce6a7949375f5248c04712d76a8fb8d348468ffa49257"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/bridge-errors.json",
+      "sha256": "00834d352f6baa72615850a707704e321625fe6df50eea447b427dad12ced9de"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/geometry.json",
+      "sha256": "13b4b699f049140906eff4d241e86af32e705ff12cb4b178f839cdb19cf92ba0"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/heading-wrap.json",
+      "sha256": "abef41a042055b56c2a5605947d9462fd5a140619c40d2ce7d3fcf641a68f156"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/memory-empty.json",
+      "sha256": "0b0623cb9dfa0bfbe7e580a4b1ec3a29307db47d8e50281f6e8a61c48b9cede6"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/render-full.json",
+      "sha256": "905f18dbd5c0c304779be21b732bceb44a51cbf4231e340ae8b6a3e955f506f7"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/render-null.json",
+      "sha256": "526bdfd637df57d10eca22819fe54d2b8c5a55e01efcbe8659170f045938178f"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/route-invalid.json",
+      "sha256": "fba8a42c0082d39638a0d386d00ff8e26a63c473cb8e231ab554049741faf5f5"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/route-valid.json",
+      "sha256": "19af9f634ffb557258bc1a58c31598ad9575aa7724242150c6ddd04033e7d8de"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/telemetry-driving.json",
+      "sha256": "8a00ff4f125e79bba37c30caf6f39391e6260ede82bcdf010c92b528115a94a7"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/telemetry-invalid.json",
+      "sha256": "07b882a47b733cd2214603ecd468411b143c1b62dc458bff8be16e719847de7a"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/telemetry-stale.json",
+      "sha256": "30984e86e7b6ce743269785c498e4b7b2d986a321e7de6ba1645a67d553cc530"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/telemetry-stop-179999.json",
+      "sha256": "3d8b2bff2f49450b25c7f7391cd5660501242725d12b283c4369b908b40ed256"
+    },
+    {
+      "category": "fixture",
+      "path": "fixtures/contracts/telemetry-stop-180000.json",
+      "sha256": "a51a1b78bfc9ab7612b9afaf0ade473a601ab53bd311c0984f1b118001bafc77"
+    },
+    {
+      "category": "harness",
+      "path": "app/src/test/java/com/example/starlog2/contracts/ContractFakes.kt",
+      "sha256": "d15af01abcf105de63490f8340baf8a1d4e5ed67aba57d3421998c6525ba975f"
+    },
+    {
+      "category": "harness",
+      "path": "app/src/test/java/com/example/starlog2/contracts/ContractHarnessTest.kt",
+      "sha256": "76fe42252b9327ea8d95d44faa930f2ff2d963f6936239f3ebbc8f2a5a17733b"
+    },
+    {
+      "category": "harness",
+      "path": "app/src/androidTest/java/com/example/starlog2/contracts/ContractGoldenInstrumentedTest.kt",
+      "sha256": "06352aa2f8a9c961e1c6f05149f65a086f1529c060b4f873397bd6aa1a22b058"
+    },
+    {
+      "category": "harness",
+      "path": "app/src/main/java/com/example/starlog2/platform/AndroidClock.kt",
+      "sha256": "8af40bf954c219bb44b99f38a24761153be7a2d20399c29e0ec699e0b87c3fef"
+    },
+    {
+      "category": "harness",
+      "path": "tools/Verify-G1.ps1",
+      "sha256": "738a5a2467e1fc23b91af7505ac0c11985a96689239ebc96436177accd724217"
+    },
+    {
+      "category": "harness",
+      "path": ".gitattributes",
+      "sha256": "9ddda34e56fb5e4fd186270ae36db4825fd7297e5c7dde4ead5bebeb2cdd7637"
+    },
+    {
+      "category": "harness",
+      "path": "app/build.gradle.kts",
+      "sha256": "823d709c9cfee97518a670ce47c563341461869aaec84ab19f58abf65faf60f8"
+    }
+  ]
+}

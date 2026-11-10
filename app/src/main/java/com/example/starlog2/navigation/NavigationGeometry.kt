@@ -1,5 +1,6 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.LatLon
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos

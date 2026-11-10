@@ -219,7 +219,9 @@ class ValhallaRouteProvider(
     internal fun parseRetryAfterMs(value: String?): Long {
         val normalized = value?.trim()?.takeIf { it.isNotEmpty() } ?: return 0L
         val seconds = normalized.toLongOrNull()
-        if (seconds != null) return validRetryDelay(seconds * 1_000L)
+        if (seconds != null) {
+            return if (seconds in 1..MAX_RETRY_AFTER_SECONDS) seconds * 1_000L else 0L
+        }
         return try {
             val retryAtMs = ZonedDateTime.parse(normalized, DateTimeFormatter.RFC_1123_DATE_TIME)
                 .toInstant()
@@ -281,6 +283,7 @@ class ValhallaRouteProvider(
         const val HTTP_TOO_MANY_REQUESTS = 429
         const val MAX_RESPONSE_BYTES = 2 * 1024 * 1024
         const val MAX_RATE_LIMIT_RETRIES = 1
+        const val MAX_RETRY_AFTER_SECONDS = 60L
         const val MAX_RETRY_AFTER_MS = 60_000L
         const val METERS_PER_KILOMETER = 1_000.0
     }

@@ -162,6 +162,15 @@ class ValhallaRouteProviderTest {
         }
     }
 
+    @Test
+    fun parseRetryAfterMs_extremeSeconds_doesNotOverflowIntoAllowedDelay() {
+        ValhallaRouteProvider("test-client").use { provider ->
+            val delay = provider.parseRetryAfterMs("2066035336255469781")
+
+            assertEquals(0L, delay)
+        }
+    }
+
     private fun validResponse(): String =
         "{\"trip\":{\"summary\":{\"length\":1.25,\"time\":95},\"legs\":[${validLeg()}]}}"
 

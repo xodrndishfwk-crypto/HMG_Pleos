@@ -4,6 +4,7 @@ import android.content.Intent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.widget.Button
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.starlog2.contracts.*
@@ -117,6 +118,10 @@ class StarLogFlowInstrumentedTest {
             await("departure hides memory"){js(a,"window.starlog.lastState.payload.experience.mode==='DRIVING_SAFE' && document.getElementById('memory-panel').hidden")=="true"}
             js(a,"sendExperience('OPEN_RECAP');true")
             await("driving command rejected"){js(a,"window.starlog.lastState.payload.error?.code==='INVALID_STATE'")=="true"}
+            var routeRetryVisible = false
+            i.runOnMainSync { routeRetryVisible = walk(a.window.decorView).filterIsInstance<Button>()
+                .single { it.text == "다시 시도" }.visibility == View.VISIBLE }
+            assertFalse("Memory command failure must not offer a route-server retry", routeRetryVisible)
             tick(clock,provider,180_002);tick(clock,provider,780_002)
             await("qualified visit persisted") {
                 SqliteMemoryRepository(i.targetContext,dbName).use{(it.listStars(SourceMode.REPLAY) as Outcome.Ok).value.size==3}

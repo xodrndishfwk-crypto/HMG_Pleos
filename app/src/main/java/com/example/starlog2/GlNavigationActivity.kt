@@ -230,10 +230,10 @@ class GlNavigationActivity : AppCompatActivity() {
         }
         webView.evaluateJavascript("window.starlog.receive(${JSONObject.quote(json)})", null)
         if (p.error != null) {
-            status.setText(if (p.error.messageKey.startsWith("storage.") || p.error.messageKey.startsWith("experience."))
-                R.string.memory_operation_failed else R.string.navigation_failed)
+            val memoryError = p.error.messageKey.startsWith("storage.") || p.error.messageKey.startsWith("experience.")
+            status.setText(if (memoryError) R.string.memory_operation_failed else R.string.navigation_failed)
             instruction.text = p.error.code
-            retryButton.visibility = View.VISIBLE
+            retryButton.visibility = if (memoryError) View.GONE else View.VISIBLE
         } else if (p.route != null) {
             status.text = getString(R.string.navigation_replay_status, p.sourceMode.name)
             retryButton.visibility = View.GONE

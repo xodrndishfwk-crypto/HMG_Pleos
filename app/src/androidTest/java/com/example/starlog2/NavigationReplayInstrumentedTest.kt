@@ -47,7 +47,10 @@ class NavigationReplayInstrumentedTest {
                     }
                 },DefaultGuidanceEngine(),AndroidClock,{ e -> activity.runOnUiThread{method.invoke(activity,e)} })
                 field.set(activity,session)
-                session!!.requestRoute(RouteRequest("ui-test",route.points.first(),route.points.last()))
+                // A replacement controller is a new renderer generation, just like a page/session restart.
+                web.evaluateJavascript("lastRenderSeq=-1;renderedRouteId=null;true") {
+                    session!!.requestRoute(RouteRequest("ui-test",route.points.first(),route.points.last()))
+                }
             }
             await { js("!!(window.starlog.lastState && window.starlog.lastState.payload.route && window.starlog.lastState.payload.route.routeId==='route-a')") == "true" }
             i.runOnMainSync {walk(activity.window.decorView).filterIsInstance<Button>().single{it.text=="모의 주행 시작"}.performClick()}

@@ -70,8 +70,11 @@ class StarLogFlowInstrumentedTest {
             },DefaultGuidanceEngine(),clock,{ e -> activity.runOnUiThread{render.invoke(activity,e)} },
                 starLog=StarLogComponents(tracked,{StarLogSessionImpl()}))
             field.set(activity,session)
-            session.requestRoute(RouteRequest("i2-test",route.points.first(),route.points.last()))
-            session.attachTelemetry(provider,SourceMode.REPLAY)
+            walk(activity.window.decorView).filterIsInstance<WebView>().single()
+                .evaluateJavascript("lastRenderSeq=-1;renderedRouteId=null;true") {
+                    session.requestRoute(RouteRequest("i2-test",route.points.first(),route.points.last()))
+                    session.attachTelemetry(provider,SourceMode.REPLAY)
+                }
         }
         await("telemetry subscription"){provider.callback.get()!=null}
         return closed

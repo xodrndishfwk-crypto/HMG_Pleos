@@ -1,5 +1,6 @@
 package com.example.starlog2.starlog
 
+import com.example.starlog2.contracts.Gear
 import com.example.starlog2.contracts.Outcome
 import com.example.starlog2.contracts.SessionCheckpoint
 import com.example.starlog2.contracts.SourceMode
@@ -10,6 +11,7 @@ import com.example.starlog2.starlog.model.StarLogErrorCodes
 import com.example.starlog2.starlog.storage.StarLogDbSchema
 import com.example.starlog2.starlog.storage.StorageSnapshot
 import com.example.starlog2.starlog.storage.TransactionalMemoryRepository
+import com.example.starlog2.starlog.visit.VisitDetector
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -226,5 +228,89 @@ class MemoryRepositoryTest {
         assertTrue(res is Outcome.Err)
         assertEquals(StarLogErrorCodes.STORAGE_FAILED, (res as Outcome.Err).error.code)
         assertTrue((repo.listConstellations(SourceMode.LIVE) as Outcome.Ok).value.isEmpty())
+    }
+
+    @Test
+    fun saveVisit_liveAndReplayDetectorVisitsWithSameTimestamp_persistsQueriesAndDeletesIndependently() {
+        val repo = TransactionalMemoryRepository()
+        val e0 = 1_800_000_000_000L
+
+        for (mode in listOf(SourceMode.LIVE, SourceMode.REPLAY)) {
+            val detector = VisitDetector()
+            detector.update(
+                StarLogFixtures.createTelemetry(
+                    monotonicMs = 0L,
+                    observedAtMs = e0,
+                    sourceMode = mode,
+                    gear = Gear.P,
+                    speedMps = 0.0,
+                    accuracyM = 5.0,
+                ),
+            )
+            val visit = detector.update(
+                StarLogFixtures.createTelemetry(
+                    monotonicMs = 600_000L,
+                    observedAtMs = e0 + 600_000L,
+                    sourceMode = mode,
+                    gear = Gear.P,
+                    speedMps = 0.0,
+                    accuracyM = 5.0,
+                ),
+            ).single()
+            val saved = repo.saveVisit(visit)
+            assertTrue("$mode detector-produced Visit must persist separately: $saved", saved is Outcome.Ok)
+        }
+
+        val liveVisits = (repo.listVisits(SourceMode.LIVE) as Outcome.Ok).value
+        val replayVisits = (repo.listVisits(SourceMode.REPLAY) as Outcome.Ok).value
+        val liveStars = (repo.listStars(SourceMode.LIVE) as Outcome.Ok).value
+        val replayStars = (repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value
+
+        assertEquals(1, liveVisits.size)
+        assertEquals(1, replayVisits.size)
+        assertEquals(1, liveStars.size)
+        assertEquals(1, replayStars.size)
+
+        // Deleting REPLAY visit must never remove LIVE visit or LIVE star
+        assertTrue(repo.deleteVisit(replayVisits.single().id) is Outcome.Ok)
+        assertTrue((repo.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+        assertTrue((repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+        assertEquals(1, (repo.listVisits(SourceMode.LIVE) as Outcome.Ok).value.size)
+        assertEquals(1, (repo.listStars(SourceMode.LIVE) as Outcome.Ok).value.size)
+    }
+
+    @Test
+    fun saveVisit_sameIdWithDifferentDedupeKeyOrSourceMode_rejectsWithStorageFailedWithoutMutatingExistingLiveVisit() {
+        val repo = TransactionalMemoryRepository()
+        val liveVisit = StarLogFixtures.createVisit(
+            id = "visit-shared-pk",
+            dedupeKey = "visit_LIVE_37.56650_126.97800_1800000000000",
+            sourceMode = SourceMode.LIVE,
+            label = "Original Live Place",
+        )
+        assertTrue(repo.saveVisit(liveVisit) is Outcome.Ok)
+
+        // Conflicting ID with a different dedupeKey and REPLAY sourceMode must fail like SQLite PK constraint
+        val conflictingReplayVisit = StarLogFixtures.createVisit(
+            id = "visit-shared-pk",
+            dedupeKey = "visit_REPLAY_37.56650_126.97800_1800000000000",
+            sourceMode = SourceMode.REPLAY,
+            label = "Conflicting Replay Place",
+        )
+        val conflictResult = repo.saveVisit(conflictingReplayVisit)
+        assertTrue(conflictResult is Outcome.Err)
+        assertEquals(StarLogErrorCodes.STORAGE_FAILED, (conflictResult as Outcome.Err).error.code)
+        assertEquals("storage.save_visit_failed", conflictResult.error.messageKey)
+
+        // Existing LIVE visit and star must remain untouched, and REPLAY must remain empty
+        val liveVisits = (repo.listVisits(SourceMode.LIVE) as Outcome.Ok).value
+        val liveStars = (repo.listStars(SourceMode.LIVE) as Outcome.Ok).value
+        assertEquals(1, liveVisits.size)
+        assertEquals("Original Live Place", liveVisits.single().label)
+        assertEquals(SourceMode.LIVE, liveVisits.single().sourceMode)
+        assertEquals(1, liveStars.size)
+        assertEquals("Original Live Place", liveStars.single().title)
+        assertTrue((repo.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+        assertTrue((repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
     }
 }

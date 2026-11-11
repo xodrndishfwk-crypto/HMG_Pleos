@@ -229,7 +229,10 @@ class VisitDetector(
             mode = candidate.sourceMode,
         )
         return Visit(
-            id = "visit-${candidate.startEpochMs}",
+            id = generateVisitId(
+                startEpochMs = candidate.startEpochMs,
+                mode = candidate.sourceMode,
+            ),
             dedupeKey = dedupeKey,
             tripId = candidate.tripId,
             point = candidate.anchorPoint,
@@ -272,6 +275,9 @@ class VisitDetector(
     }
 
     companion object {
+        fun generateVisitId(startEpochMs: Long, mode: SourceMode): String =
+            "visit-${mode.name.lowercase(Locale.US)}-$startEpochMs"
+
         fun generateDedupeKey(point: LatLon, startEpochMs: Long, mode: SourceMode): String {
             val latR = String.format(Locale.US, "%.5f", point.lat)
             val lonR = String.format(Locale.US, "%.5f", point.lon)

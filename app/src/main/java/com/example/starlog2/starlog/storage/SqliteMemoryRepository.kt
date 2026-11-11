@@ -61,6 +61,11 @@ class SqliteMemoryRepository(
         db.beginTransaction()
         return try {
             val existing = findVisitByDedupeKey(db, visit.dedupeKey)
+            if (existing != null && existing.sourceMode != visit.sourceMode) {
+                throw IllegalStateException(
+                    "SourceMode conflict for Visit ${existing.id}: ${existing.sourceMode} vs ${visit.sourceMode}",
+                )
+            }
             val canonicalVisitId = existing?.id ?: visit.id
             val effectiveEndAtMs = if (existing != null) {
                 maxOf(existing.endAtMs, visit.endAtMs)

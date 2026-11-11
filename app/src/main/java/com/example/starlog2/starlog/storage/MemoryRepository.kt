@@ -204,10 +204,20 @@ class TransactionalMemoryRepository(
         failNextWrite = true
     }
 
-    override fun saveVisit(visit: Visit): Outcome<MemoryStar> = executeInTransaction { state ->
+    override fun saveVisit(visit: Visit): Outcome<MemoryStar> = executeInTransaction(
+        errorMessageKey = "storage.save_visit_failed",
+    ) { state ->
         val existingVisitId = state.visitIdByDedupeKey[visit.dedupeKey]
+        if (existingVisitId == null && state.visitsById.containsKey(visit.id)) {
+            throw IllegalStateException("Primary key conflict on Visit.id: ${visit.id}")
+        }
         val canonicalVisitId = existingVisitId ?: visit.id
         val existingVisit = state.visitsById[canonicalVisitId]
+        if (existingVisit != null && existingVisit.sourceMode != visit.sourceMode) {
+            throw IllegalStateException(
+                "SourceMode conflict for Visit $canonicalVisitId: ${existingVisit.sourceMode} vs ${visit.sourceMode}",
+            )
+        }
 
         val mergedVisit = if (existingVisit != null) {
             existingVisit.copy(
@@ -224,6 +234,9 @@ class TransactionalMemoryRepository(
 
         val starId = "star-$canonicalVisitId"
         val existingStar = state.starsById[starId]
+        if (existingStar != null && existingStar.visitId != canonicalVisitId) {
+            throw IllegalStateException("Primary key conflict on MemoryStar.id: $starId")
+        }
         val star = existingStar?.copy(
             title = mergedVisit.label ?: existingStar.title,
         ) ?: MemoryStar(
@@ -329,7 +342,10 @@ class TransactionalMemoryRepository(
         Outcome.Err(storageError("storage.list_constellations_failed"))
     }
 
-    private fun <T> executeInTransaction(block: (StorageSnapshot) -> T): Outcome<T> {
+    private fun <T> executeInTransaction(
+        errorMessageKey: String = "storage.transaction_failed",
+        block: (StorageSnapshot) -> T,
+    ): Outcome<T> {
         val workingCopy = backingStore.deepCopy()
         return try {
             if (failNextWrite) {
@@ -340,7 +356,7 @@ class TransactionalMemoryRepository(
             commitSnapshot(workingCopy)
             Outcome.Ok(result)
         } catch (e: Exception) {
-            Outcome.Err(storageError("storage.transaction_failed"))
+            Outcome.Err(storageError(errorMessageKey))
         }
     }
 

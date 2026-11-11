@@ -272,4 +272,58 @@ class VisitDetectorTest {
         assertEquals("visit_LIVE_37.56650_126.97800_1700000000000", restoredVisits.single().dedupeKey)
         assertNull(detector.currentQualifiedPendingVisit())
     }
+
+    @Test
+    fun update_liveAndReplayAtSameTimestamp_generatesDistinctSourceNamespacedIdsAndDedupeKeys() {
+        val e0 = 1_800_000_000_000L
+        val liveDetector = VisitDetector()
+        val replayDetector = VisitDetector()
+
+        liveDetector.update(
+            StarLogFixtures.createTelemetry(
+                monotonicMs = 0L,
+                observedAtMs = e0,
+                sourceMode = SourceMode.LIVE,
+                gear = Gear.P,
+                speedMps = 0.0,
+                accuracyM = 5.0,
+            ),
+        )
+        val liveVisit = liveDetector.update(
+            StarLogFixtures.createTelemetry(
+                monotonicMs = 600_000L,
+                observedAtMs = e0 + 600_000L,
+                sourceMode = SourceMode.LIVE,
+                gear = Gear.P,
+                speedMps = 0.0,
+                accuracyM = 5.0,
+            ),
+        ).single()
+
+        replayDetector.update(
+            StarLogFixtures.createTelemetry(
+                monotonicMs = 0L,
+                observedAtMs = e0,
+                sourceMode = SourceMode.REPLAY,
+                gear = Gear.P,
+                speedMps = 0.0,
+                accuracyM = 5.0,
+            ),
+        )
+        val replayVisit = replayDetector.update(
+            StarLogFixtures.createTelemetry(
+                monotonicMs = 600_000L,
+                observedAtMs = e0 + 600_000L,
+                sourceMode = SourceMode.REPLAY,
+                gear = Gear.P,
+                speedMps = 0.0,
+                accuracyM = 5.0,
+            ),
+        ).single()
+
+        assertTrue(liveVisit.id != replayVisit.id)
+        assertTrue(liveVisit.dedupeKey != replayVisit.dedupeKey)
+        assertEquals("visit-live-$e0", liveVisit.id)
+        assertEquals("visit-replay-$e0", replayVisit.id)
+    }
 }

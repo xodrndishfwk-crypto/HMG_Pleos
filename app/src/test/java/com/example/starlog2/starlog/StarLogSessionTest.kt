@@ -112,7 +112,8 @@ class StarLogSessionTest {
         val session2 = StarLogSessionImpl()
         val restoredVisits = session2.restore(checkpoint)
         assertEquals(1, restoredVisits.size)
-        assertEquals(checkpoint.qualifiedPendingVisit!!.dedupeKey, restoredVisits.single().dedupeKey)
+        val pendingVisit = checkNotNull(checkpoint.qualifiedPendingVisit)
+        assertEquals(pendingVisit.dedupeKey, restoredVisits.single().dedupeKey)
 
         // First frame after restore must be STOP_PENDING with 0ms elapsed (180s timer reset on restore per spec)
         val afterRestoreUpdate = session2.update(

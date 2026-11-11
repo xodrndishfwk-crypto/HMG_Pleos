@@ -86,6 +86,13 @@ class StarLogCoordinatorTest {
         assertEquals(1,(h.repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value.size)
         h.coordinator.close();h.io.drain()
     }
+    @Test fun closeFlushesLatestVisitEndWhileOlderUpsertIsStillPending() {
+        val h=Harness();h.begin();h.tick(0);h.tick(600_000)
+        h.tick(650_000);h.tick(650_001,gear=Gear.D,speed=5.0)
+        h.coordinator.close();h.io.drain()
+        assertEquals(1_800_000_650_000L,(h.repo.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.single().endAtMs)
+        assertEquals(1,(h.repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value.size)
+    }
     @Test fun sourceSwitchDiscardsOldLoadAndQueriesOnlyActiveNamespace() {
         val h=Harness();h.seed("replay",SourceMode.REPLAY);h.seed("live",SourceMode.LIVE)
         h.coordinator.begin(SourceMode.REPLAY);h.coordinator.begin(SourceMode.LIVE);h.io.drain()

@@ -138,10 +138,21 @@ class StarLogCoordinator(
         if (!active || closed) return
         active = false; generation++
         val checkpoint = domain!!.checkpoint(latest?.observedAtMs ?: clock.wallTimeMs()).copy(sourceMode = mode)
-        flush()
+        // Capture the newest final end timestamp even if an older upsert is still in flight.
+        val finalWrites = pendingWrites.values.toList()
         components.io.execute {
+            val writes = finalWrites.map { it to attempt { components.repository.saveVisit(it) } }
             val result = attempt { components.repository.saveCheckpoint(checkpoint) }
-            if (result is Outcome.Err) dispatch { if (!closed) { failure = result.error; changed() } }
+            dispatch {
+                if (!closed) {
+                    writes.forEach { (visit, saved) ->
+                        if (saved is Outcome.Ok && pendingWrites[visit.dedupeKey] == visit) pendingWrites.remove(visit.dedupeKey)
+                    }
+                    val error = writes.map { it.second }.filterIsInstance<Outcome.Err>().firstOrNull()?.error
+                        ?: (result as? Outcome.Err)?.error
+                    if (error != null) { failure = error; changed() }
+                }
+            }
         }
         latest = null; update = emptyUpdate(); changed()
     }

@@ -38,7 +38,7 @@ class GlNavigationActivity : AppCompatActivity() {
     private var navigationStarted = false
     private val receivedActions = linkedSetOf<String>()
     private fun newNavigation() = com.example.starlog2.integration.NavigationSession(
-        com.example.starlog2.navigation.ValhallaRouteProvider("starlog-android"),
+        routeProviderFactory(),
         com.example.starlog2.navigation.DefaultGuidanceEngine(), com.example.starlog2.platform.AndroidClock,
         { envelope -> runOnUiThread { if (!destroyed) renderNavigation(envelope) } },
         starLog = com.example.starlog2.integration.StarLogComponents(
@@ -277,6 +277,9 @@ class GlNavigationActivity : AppCompatActivity() {
 
     private data class Point(val lat:Double,val lon:Double)
     private companion object{
+        @Volatile var routeProviderFactory: () -> com.example.starlog2.contracts.RouteProvider = {
+            com.example.starlog2.navigation.ValhallaRouteProvider("starlog-android")
+        }
         val START=Point(37.497952,127.027619)
         val END=Point(37.504501,127.048962)
     }

@@ -15,6 +15,8 @@ import com.example.starlog2.starlog.session.StarLogSessionImpl
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicReference
 /** Synthetic telemetry and virtual time; real Activity, JS bridge, reducer, IO and SQLite. */
 @RunWith(AndroidJUnit4::class)
 class StarLogFlowInstrumentedTest {
+    @Before fun useDeterministicRoute() { NavigationTestRoutes.install() }
+    @After fun restoreRouteProvider() { NavigationTestRoutes.restore() }
     private val i=InstrumentationRegistry.getInstrumentation()
     private val dbName="high-i2-flow-test.db"
     private class TestClock:Clock {

@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 import org.json.JSONTokener
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,6 +21,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class G0RecoveryInstrumentedTest {
+    @Before fun useDeterministicRoute() { NavigationTestRoutes.install() }
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val activities = mutableListOf<Activity>()
 
@@ -71,6 +73,7 @@ class G0RecoveryInstrumentedTest {
     @After fun finishActivities() {
         instrumentation.runOnMainSync { activities.reversed().forEach { if (!it.isFinishing) it.finish() } }
         instrumentation.waitForIdleSync()
+        NavigationTestRoutes.restore()
     }
 
     @Test fun remoteStyleFailure_retryRestoresMapAndVisibleAttribution() {

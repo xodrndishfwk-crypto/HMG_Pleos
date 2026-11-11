@@ -13,11 +13,15 @@ import com.example.starlog2.navigation.DefaultGuidanceEngine
 import com.example.starlog2.platform.AndroidClock
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(AndroidJUnit4::class)
 class NavigationReplayInstrumentedTest {
+    @Before fun useDeterministicRoute() { NavigationTestRoutes.install() }
+    @After fun restoreRouteProvider() { NavigationTestRoutes.restore() }
     @Test fun syntheticRouteReplayReachesRealWebViewAndStopsOnDestroy() {
         val i=InstrumentationRegistry.getInstrumentation()
         val activity=i.startActivitySync(Intent(i.targetContext,GlNavigationActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as GlNavigationActivity

@@ -1,5 +1,13 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.GuidanceEngine
+import com.example.starlog2.contracts.GuidanceState
+import com.example.starlog2.contracts.GuidanceStatus
+import com.example.starlog2.contracts.LatLon
+import com.example.starlog2.contracts.Maneuver
+import com.example.starlog2.contracts.Quality
+import com.example.starlog2.contracts.Route
+import com.example.starlog2.contracts.Telemetry
 import kotlin.math.max
 
 data class GuidanceConfig(
@@ -10,6 +18,8 @@ data class GuidanceConfig(
     val arrivalEndpointM: Double = 20.0,
     val backwardSegmentWindow: Int = 2,
     val forwardSegmentWindow: Int = 8,
+    val maximumBacktrackM: Double = 15.0,
+    val maximumForwardJumpM: Double = 500.0,
 )
 
 class DefaultGuidanceEngine(
@@ -18,6 +28,7 @@ class DefaultGuidanceEngine(
     private var route: Route? = null
     private var cumulative = DoubleArray(0)
     private var lastSegmentIndex: Int? = null
+    private var lastAlongM: Double? = null
     private var deviationCount = 0
     private var arrived = false
 
@@ -27,6 +38,10 @@ class DefaultGuidanceEngine(
         require(config.maximumAccuracyM >= 0)
         require(config.arrivalAlongM >= 0)
         require(config.arrivalEndpointM >= 0)
+        require(config.backwardSegmentWindow >= 0)
+        require(config.forwardSegmentWindow >= 0)
+        require(config.maximumBacktrackM >= 0)
+        require(config.maximumForwardJumpM > 0)
     }
 
     override fun setRoute(route: Route) {
@@ -34,6 +49,7 @@ class DefaultGuidanceEngine(
         this.route = route
         cumulative = NavigationGeometry.cumulativeDistances(route.points)
         lastSegmentIndex = null
+        lastAlongM = null
         deviationCount = 0
         arrived = false
     }
@@ -51,6 +67,7 @@ class DefaultGuidanceEngine(
         lastSegmentIndex = projection.segmentIndex
         val alongM = cumulative[projection.segmentIndex] +
             (cumulative[projection.segmentIndex + 1] - cumulative[projection.segmentIndex]) * projection.fraction
+        lastAlongM = alongM
         val geometryLengthM = cumulative.last()
         val geometryRemainingM = max(0.0, geometryLengthM - alongM)
         val endpointDistanceM = NavigationGeometry.distanceM(fix.point, activeRoute.points.last())
@@ -91,6 +108,7 @@ class DefaultGuidanceEngine(
         route = null
         cumulative = DoubleArray(0)
         lastSegmentIndex = null
+        lastAlongM = null
         deviationCount = 0
         arrived = false
     }
@@ -106,11 +124,37 @@ class DefaultGuidanceEngine(
         var best: RouteProjection? = null
         for (index in firstIndex..lastIndex) {
             val projection = NavigationGeometry.projectToSegment(point, points[index], points[index + 1])
-            if (best == null || projection.distanceM < best.distanceM) {
+            val candidateAlongM = cumulative[index] +
+                (cumulative[index + 1] - cumulative[index]) * projection.fraction
+            if (isAllowedProgress(candidateAlongM) && (best == null || projection.distanceM < best.distanceM)) {
                 best = RouteProjection(index, projection.point, projection.fraction, projection.distanceM)
             }
         }
-        return checkNotNull(best)
+        return best ?: projectionAtLastProgress(points, point)
+    }
+
+    private fun isAllowedProgress(candidateAlongM: Double): Boolean {
+        val previousAlongM = lastAlongM ?: return true
+        return candidateAlongM >= previousAlongM - config.maximumBacktrackM &&
+            candidateAlongM <= previousAlongM + config.maximumForwardJumpM
+    }
+
+    private fun projectionAtLastProgress(points: List<LatLon>, point: LatLon): RouteProjection {
+        val segmentIndex = checkNotNull(lastSegmentIndex)
+        val alongM = checkNotNull(lastAlongM)
+        val segmentLengthM = cumulative[segmentIndex + 1] - cumulative[segmentIndex]
+        val fraction = if (segmentLengthM == 0.0) {
+            0.0
+        } else {
+            ((alongM - cumulative[segmentIndex]) / segmentLengthM).coerceIn(0.0, 1.0)
+        }
+        val snappedPoint = NavigationGeometry.pointAtDistance(points, alongM)
+        return RouteProjection(
+            segmentIndex = segmentIndex,
+            point = snappedPoint,
+            fraction = fraction,
+            distanceM = NavigationGeometry.distanceM(point, snappedPoint),
+        )
     }
 
     private fun nextManeuver(route: Route, alongM: Double): Maneuver? {

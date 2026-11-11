@@ -92,6 +92,39 @@
       duration: 1000
     });
   }
+  let lastRenderSeq = -1;
+  let renderedRouteId = null;
+  let vehicleMarker = null;
+  window.starlog = { receive(payload) {
+    const e = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    if (e.version !== 1 || e.type !== 'renderState' || !Number.isSafeInteger(e.seq)) throw Error('CONTRACT_VERSION_MISMATCH');
+    if (e.seq <= lastRenderSeq) return;
+    const p = e.payload;
+    if (p.route && p.route.routeId !== renderedRouteId) {
+      const coordinates = p.route.coordinates;
+      showRoute({coordinates, lookAhead: coordinates[0], bearing: map.getBearing()});
+      renderedRouteId = p.route.routeId;
+    }
+    if (p.pose) {
+      if (!vehicleMarker) {
+        const el = document.createElement('div');
+        el.textContent = '▲'; el.style.cssText = 'color:#087dff;font-size:38px;text-shadow:0 0 4px white';
+        vehicleMarker = new maplibregl.Marker({element:el, rotationAlignment:'map'});
+      }
+      vehicleMarker.getElement().textContent = p.pose.headingDeg === null ? '●' : '▲';
+      vehicleMarker.getElement().style.opacity = p.pose.quality === 'VALID' ? '1' : '0.45';
+      vehicleMarker.setLngLat(p.pose.coordinate).setRotation(p.pose.headingDeg ?? 0).addTo(map);
+      const heading = p.pose.headingDeg ?? map.getBearing();
+      const rad = Math.PI / 180, lat = p.pose.coordinate[1] * rad, lon = p.pose.coordinate[0] * rad;
+      const d = p.camera.lookAheadM / 6371008.8, bearing = heading * rad;
+      const aheadLat = Math.asin(Math.sin(lat)*Math.cos(d)+Math.cos(lat)*Math.sin(d)*Math.cos(bearing));
+      const aheadLon = lon + Math.atan2(Math.sin(bearing)*Math.sin(d)*Math.cos(lat), Math.cos(d)-Math.sin(lat)*Math.sin(aheadLat));
+      map.easeTo({center:[aheadLon/rad,aheadLat/rad], bearing:heading,
+        pitch:p.camera.pitchDeg, zoom:p.camera.zoom, padding:{top:0,right:0,bottom:150,left:0}, duration:300});
+    } else if (vehicleMarker) { vehicleMarker.remove(); vehicleMarker = null; }
+    lastRenderSeq = e.seq;
+    window.starlog.lastState = e;
+  }};
 </script>
 </body>
 </html>

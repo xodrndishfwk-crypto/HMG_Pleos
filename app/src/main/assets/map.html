@@ -16,10 +16,25 @@
   <style>
     html,body,#map { width:100%; height:100%; margin:0; overflow:hidden; background:#8bc9ee; }
     .maplibregl-ctrl-bottom-right { bottom: calc(var(--overlay-inset, 140px) + 8px); }
+    #starlog-sky { position:absolute;top:22%;left:5%;right:5%;height:55px;pointer-events:none; }
+    .memory-star { position:absolute;transform:translateX(-50%);color:white;background:#18395cbd;
+      border:1px solid #cceaff;border-radius:50%;width:44px;height:44px;font-size:25px;pointer-events:auto; }
+    .memory-star:disabled { pointer-events:none;opacity:.75; }
+    #memory-panel { position:absolute;right:18px;top:34%;max-width:260px;padding:18px;
+      border-radius:14px;background:#102239ee;color:white;font:18px sans-serif; }
+    #memory-panel[hidden],#recap-open[hidden] { display:none; }
+    #recap-open { position:absolute;right:18px;top:28%;padding:12px;font-size:18px; }
+    #recap-close { padding:10px;font-size:18px; }
   </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="starlog-sky" aria-label="방위별 기억"></div>
+<button id="recap-open" hidden>기억 돌아보기</button>
+<section id="memory-panel" hidden>
+  <div id="memory-mode"></div><h2 id="memory-title"></h2><div id="memory-date"></div>
+  <div id="memory-photo"></div><button id="recap-close" hidden>닫기</button>
+</section>
 <script>
   const map = new maplibregl.Map({
     container: 'map',
@@ -95,11 +110,37 @@
   let lastRenderSeq = -1;
   let renderedRouteId = null;
   let vehicleMarker = null;
+  let actionSeq = 0;
+  function sendExperience(action, starId = null) {
+    if (window.Android && Android.onEvent) Android.onEvent(JSON.stringify({version:1,type:'userAction',
+      session:sessionId,messageId:`action-${sessionId}-${++actionSeq}`,payload:{action,starId}}));
+  }
+  document.getElementById('recap-open').onclick = () => sendExperience('OPEN_RECAP');
+  document.getElementById('recap-close').onclick = () => sendExperience('CLOSE_RECAP');
+  function renderMemories(p) {
+    const mode = p.experience.mode, frame = mode === 'MEMORY_FRAME', recap = mode === 'RECAP';
+    const sky = document.getElementById('starlog-sky'); sky.replaceChildren();
+    for (const item of p.skyItems) {
+      const star = document.createElement('button'); star.className = 'memory-star';
+      star.textContent = item.selected ? '★' : '☆'; star.dataset.starId = item.starId;
+      star.style.left = (50 + item.relativeBearingDeg / 60 * 90) + '%';
+      star.disabled = !frame; star.setAttribute('aria-label', '기억 선택');
+      star.onclick = () => sendExperience('SELECT_MEMORY', item.starId); sky.append(star);
+    }
+    document.getElementById('recap-open').hidden = !['STOP_PENDING','MEMORY_FRAME'].includes(mode);
+    document.getElementById('memory-panel').hidden = !(frame || recap);
+    document.getElementById('recap-close').hidden = !recap;
+    document.getElementById('memory-mode').textContent = recap ? '기억 돌아보기' : '기억';
+    document.getElementById('memory-title').textContent = p.memory ? (p.memory.title ?? '') : '표시할 기억이 없습니다.';
+    document.getElementById('memory-date').textContent = p.memory ? new Date(p.memory.dateAtMs).toLocaleDateString('ko-KR') : '';
+    document.getElementById('memory-photo').textContent = p.memory ? (p.memory.photoRef === null ? '사진 없음' : '사진 연결 준비 중') : '';
+  }
   window.starlog = { receive(payload) {
     const e = typeof payload === 'string' ? JSON.parse(payload) : payload;
     if (e.version !== 1 || e.type !== 'renderState' || !Number.isSafeInteger(e.seq)) throw Error('CONTRACT_VERSION_MISMATCH');
     if (e.seq <= lastRenderSeq) return;
     const p = e.payload;
+    renderMemories(p);
     if (p.route && p.route.routeId !== renderedRouteId) {
       const coordinates = p.route.coordinates;
       showRoute({coordinates, lookAhead: coordinates[0], bearing: map.getBearing()});

@@ -36,11 +36,28 @@ class GlNavigationActivity : AppCompatActivity() {
     private var latestRender: com.example.starlog2.contracts.RenderEnvelope? = null
     private lateinit var maneuverLabel: TextView
     private var navigationStarted = false
+    private val receivedActions = linkedSetOf<String>()
     private fun newNavigation() = com.example.starlog2.integration.NavigationSession(
-        com.example.starlog2.navigation.ValhallaRouteProvider("starlog-android"),
+        routeProviderFactory(),
         com.example.starlog2.navigation.DefaultGuidanceEngine(), com.example.starlog2.platform.AndroidClock,
-        { envelope -> runOnUiThread { if (!destroyed) renderNavigation(envelope) } })
+        { envelope -> runOnUiThread { if (!destroyed) renderNavigation(envelope) } },
+        starLog = com.example.starlog2.integration.StarLogComponents(
+            com.example.starlog2.starlog.storage.SqliteMemoryRepository(applicationContext),
+            { com.example.starlog2.starlog.session.StarLogSessionImpl(
+                experienceReducer = com.example.starlog2.starlog.experience.ExperienceReducer(
+                    com.example.starlog2.starlog.model.ExperienceConfig(maxSampleGapMs = 2_000)),
+                visitDetector = com.example.starlog2.starlog.visit.VisitDetector(
+                    com.example.starlog2.starlog.model.VisitConfig(maxSampleGapMs = 2_000)),
+                sessionId = java.util.UUID.randomUUID().toString()) }))
     private val handler = Handler(Looper.getMainLooper())
+    private val checkTelemetryFreshness = object : Runnable {
+        override fun run() {
+            if (!destroyed) {
+                navigation.refreshTelemetryAge()
+                handler.postDelayed(this, 1_000)
+            }
+        }
+    }
     private val mapSession = MapLoadSession()
     private var destroyed = false
     private var mapReady = false
@@ -71,9 +88,25 @@ class GlNavigationActivity : AppCompatActivity() {
         navigation = newNavigation()
         setContentView(buildUi())
         startMap()
+        handler.post(checkTelemetryFreshness)
     }
 
     private inner class Bridge {
+        @JavascriptInterface fun onEvent(raw: String) {
+            val event = try { com.example.starlog2.contracts.ContractJson.decodeEvent(raw) }
+                catch (_: Exception) { return }
+            runOnUiThread {
+                if (destroyed || !mapReady || event.optInt("session", -1) != mapSession.generation) return@runOnUiThread
+                if (event.getString("type") != "userAction") return@runOnUiThread
+                val id = event.getString("messageId")
+                if (!receivedActions.add(id)) return@runOnUiThread
+                if (receivedActions.size > 128) receivedActions.remove(receivedActions.first())
+                val payload = event.getJSONObject("payload")
+                navigation.handleCommand(com.example.starlog2.contracts.ExperienceCommand(
+                    com.example.starlog2.contracts.ExperienceAction.valueOf(payload.getString("action")),
+                    if (payload.isNull("starId")) null else payload.getString("starId")))
+            }
+        }
         @JavascriptInterface fun onMapReady(token: Int) = runOnUiThread {
             if (destroyed || !mapSession.ready(token)) return@runOnUiThread
             mapReady = true
@@ -94,6 +127,7 @@ class GlNavigationActivity : AppCompatActivity() {
         if (destroyed) return
         mapReady = false
         val token = mapSession.begin()
+        receivedActions.clear()
         retryButton.visibility = View.GONE
         status.setText(R.string.map_loading)
         instruction.text = "지도와 경로를 준비합니다."
@@ -196,9 +230,10 @@ class GlNavigationActivity : AppCompatActivity() {
         }
         webView.evaluateJavascript("window.starlog.receive(${JSONObject.quote(json)})", null)
         if (p.error != null) {
-            status.setText(R.string.navigation_failed)
+            val memoryError = p.error.messageKey.startsWith("storage.") || p.error.messageKey.startsWith("experience.")
+            status.setText(if (memoryError) R.string.memory_operation_failed else R.string.navigation_failed)
             instruction.text = p.error.code
-            retryButton.visibility = View.VISIBLE
+            retryButton.visibility = if (memoryError) View.GONE else View.VISIBLE
         } else if (p.route != null) {
             status.text = getString(R.string.navigation_replay_status, p.sourceMode.name)
             retryButton.visibility = View.GONE
@@ -227,8 +262,8 @@ class GlNavigationActivity : AppCompatActivity() {
             com.example.starlog2.contracts.SourceMode.REPLAY)
     }
 
-    override fun onResume(){super.onResume();webView.onResume()}
-    override fun onPause(){webView.onPause();super.onPause()}
+    override fun onResume(){super.onResume();webView.onResume();navigation.resume()}
+    override fun onPause(){navigation.pause();webView.onPause();super.onPause()}
     override fun onDestroy() {
         destroyed = true
         mapSession.close()
@@ -242,6 +277,9 @@ class GlNavigationActivity : AppCompatActivity() {
 
     private data class Point(val lat:Double,val lon:Double)
     private companion object{
+        @Volatile var routeProviderFactory: () -> com.example.starlog2.contracts.RouteProvider = {
+            com.example.starlog2.navigation.ValhallaRouteProvider("starlog-android")
+        }
         val START=Point(37.497952,127.027619)
         val END=Point(37.504501,127.048962)
     }

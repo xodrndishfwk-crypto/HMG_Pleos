@@ -6,6 +6,9 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
+    <exclude domain="database" path="starlog_v1.db" />
+    <exclude domain="database" path="starlog_v1.db-wal" />
+    <exclude domain="database" path="starlog_v1.db-shm" />
     <!--
    <include domain="sharedpref" path="."/>
    <exclude domain="sharedpref" path="device.xml"/>

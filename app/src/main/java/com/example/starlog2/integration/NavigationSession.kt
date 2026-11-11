@@ -14,6 +14,7 @@ class NavigationSession(
     private val render: (RenderEnvelope) -> Unit,
     private val onArrival: (String) -> Unit = {},
     private val queue: ExecutorService = Executors.newSingleThreadExecutor(),
+    starLog: StarLogComponents? = null,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private var route: Route? = null
@@ -30,6 +31,8 @@ class NavigationSession(
     private var lastRerouteAt: Long? = null
     private var arrivalRoute: String? = null
     private var seq = 0L
+    private var paused = false
+    private val memory = starLog?.let { StarLogCoordinator(it, clock, { block -> submit(block) }, { publish() }) }
 
     private fun submit(block: () -> Unit) {
         if (closed.get()) return
@@ -53,16 +56,33 @@ class NavigationSession(
         } }
     }
     fun attachTelemetry(value: TelemetryProvider, mode: SourceMode) = submit {
-        provider?.stop(); val token = ++sourceGeneration
+        provider?.stop(); ++sourceGeneration
         provider = value; source = mode; sample = null; state = null; cursor.reset(); lastRerouteAt = null
+        memory?.begin(mode)
+        if (!paused) startProvider(value)
+        publish()
+    }
+    private fun startProvider(value: TelemetryProvider) {
+        val token = sourceGeneration
         value.start({ next -> submit {
             if (token == sourceGeneration && next.sourceMode == source) consume(next)
         } }, { failure -> submit { if (token == sourceGeneration) { error = failure; publish() } } })
-        publish()
+    }
+    fun handleCommand(command: ExperienceCommand) = submit { memory?.command(command) }
+    fun refreshTelemetryAge() = submit { memory?.refresh() }
+    fun pause() = submit {
+        if (!paused) { paused = true; sourceGeneration++; provider?.stop(); memory?.suspend(); publish() }
+    }
+    fun resume() = submit {
+        if (paused) {
+            paused = false; sourceGeneration++; cursor.reset(); memory?.begin(source)
+            provider?.let(::startProvider)
+        }
     }
     private fun consume(value: Telemetry) {
         if (!cursor.accept(value)) return
         sample = value; state = guidance.update(value)
+        memory?.telemetry(value)
         val current = state
         if (current?.status == GuidanceStatus.ARRIVED && current.routeId != arrivalRoute) {
             arrivalRoute = current.routeId; current.routeId?.let(onArrival)
@@ -87,13 +107,14 @@ class NavigationSession(
             pose, CameraConfig(76.0, 17.7, 310.0), state,
             ExperienceState(ExperienceMode.DRIVING_SAFE, null, 0, null), emptyList(), null, error)
         val next = ++seq
-        render(RenderEnvelope(1, "renderState", "render-$next", next, payload))
+        render(RenderEnvelope(1, "renderState", "render-$next", next, memory?.decorate(payload) ?: payload))
     }
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         queue.execute {
             generation++; sourceGeneration++; cancel?.cancel(); provider?.stop()
             (routes as? AutoCloseable)?.close(); guidance.clear()
+            memory?.close()
         }
         queue.shutdown()
     }

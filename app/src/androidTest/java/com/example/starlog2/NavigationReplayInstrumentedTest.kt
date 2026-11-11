@@ -13,11 +13,15 @@ import com.example.starlog2.navigation.DefaultGuidanceEngine
 import com.example.starlog2.platform.AndroidClock
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicReference
 
 @RunWith(AndroidJUnit4::class)
 class NavigationReplayInstrumentedTest {
+    @Before fun useDeterministicRoute() { NavigationTestRoutes.install() }
+    @After fun restoreRouteProvider() { NavigationTestRoutes.restore() }
     @Test fun syntheticRouteReplayReachesRealWebViewAndStopsOnDestroy() {
         val i=InstrumentationRegistry.getInstrumentation()
         val activity=i.startActivitySync(Intent(i.targetContext,GlNavigationActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as GlNavigationActivity
@@ -47,7 +51,10 @@ class NavigationReplayInstrumentedTest {
                     }
                 },DefaultGuidanceEngine(),AndroidClock,{ e -> activity.runOnUiThread{method.invoke(activity,e)} })
                 field.set(activity,session)
-                session!!.requestRoute(RouteRequest("ui-test",route.points.first(),route.points.last()))
+                // A replacement controller is a new renderer generation, just like a page/session restart.
+                web.evaluateJavascript("lastRenderSeq=-1;renderedRouteId=null;true") {
+                    session!!.requestRoute(RouteRequest("ui-test",route.points.first(),route.points.last()))
+                }
             }
             await { js("!!(window.starlog.lastState && window.starlog.lastState.payload.route && window.starlog.lastState.payload.route.routeId==='route-a')") == "true" }
             i.runOnMainSync {walk(activity.window.decorView).filterIsInstance<Button>().single{it.text=="모의 주행 시작"}.performClick()}

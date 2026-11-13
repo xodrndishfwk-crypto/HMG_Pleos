@@ -39,6 +39,8 @@ flow.stopGuidance()
 
 [확실] 첫 전체 Pleos 실행: 21개 중 20개 통과, G0RecoveryInstrumentedTest.remoteStyleFailure_retryRestoresMapAndVisibleAttribution는 Activity 실행 45초 제한 초과로 실패했다(총 153.924초). 이 실패를 통과로 처리하지 않았으며 앱 프로세스 정리 후 복구 시험을 격리 재실행했다. 후속 결과는 아래에 기록한다.
 
+[확실] 후속 결과: G0 복구 4개 PASS(61.422초), 전체 21개 재실행 PASS(107.794초). 최초 시간 초과의 정확한 원인은 확정하지 않았으며 간헐 실행 불안정 이력으로 보존한다. HIGH 코드 검증 SHA는 7e2a8645667d26d79170b4e405c0631b2e03d79e이며 후속 문서 commit은 앱 소스를 변경하지 않는다. HIGH 연결 PR은 [#19](https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/19)다.
+
 [확실] HIGH 전체 Gradle 빌드/AndroidTest APK 빌드 성공, JVM 131개 실패 0, lint No issues found. 목적지 계측 단독 시험 1개 PASS(14.793초)를 먼저 확인했다. 전체 Pleos 회귀 및 병합 후 결과는 아래 최신 검증 기록에 덧붙인다. 시험은 fake search/route와 합성 REPLAY를 사용하지만 실제 Activity, NavigationSession, WebView 및 MapLibre source/layer를 검사한다.
 
 ```powershell

@@ -80,4 +80,34 @@ class NavigationSessionTest {
         val count=states.size; a.emit(ContractSamples.telemetry(clock)); assertEquals(count,states.size)
         b.emit(ContractSamples.telemetry(clock)); assertEquals(count+1,states.size); session.close()
     }
+    @Test fun computedRouteAdoptionCancelsPendingRequestAndIgnoresItsLateResponse() {
+        val routes=Routes();val states=mutableListOf<RenderEnvelope>()
+        val session=NavigationSession(routes,Guidance(),FakeClock(),states::add,queue=InlineQueue())
+        session.requestRoute(request)
+        val input=request.copy(requestId="adopted")
+        session.adoptRoute(input,ContractSamples.route("adopted").copy(routeId="adopted"))
+        assertEquals(1,routes.callbacks.size);assertEquals(1,routes.cancelled)
+        routes.callbacks[0](Outcome.Ok(ContractSamples.route("a")))
+        assertEquals("adopted",states.last().payload.route!!.routeId);session.close()
+    }
+    @Test fun stoppingGuidanceInvalidatesInFlightRouteReply() {
+        val routes=Routes();val states=mutableListOf<RenderEnvelope>()
+        val session=NavigationSession(routes,Guidance(),FakeClock(),states::add,queue=InlineQueue())
+        session.requestRoute(request);session.stopGuidance();routes.callbacks[0](Outcome.Ok(ContractSamples.route("a")))
+        assertNull(states.last().payload.route);assertEquals(GuidanceStatus.IDLE,states.last().payload.guidance!!.status);session.close()
+    }
+    @Test fun failedDestinationReplacementKeepsOldRouteAndRerouteTargetTogether() {
+        val routes=Routes();val guidance=Guidance();val clock=FakeClock();val provider=FakeTelemetryProvider()
+        val ends=mutableListOf<LatLon>()
+        val recording=object:RouteProvider{
+            override fun request(input:RouteRequest,done:(Outcome<Route>)->Unit):CancelHandle{ends+=input.end;return routes.request(input,done)}
+        }
+        val session=NavigationSession(recording,guidance,clock,{},queue=InlineQueue())
+        session.requestRoute(request);routes.callbacks[0](Outcome.Ok(ContractSamples.route("a")))
+        session.requestRoute(request.copy(requestId="bad",end=LatLon(38.0,128.0)))
+        routes.callbacks[1](Outcome.Err(AppError("NETWORK_UNAVAILABLE","navigation.network",true,"bad")))
+        session.attachTelemetry(provider,SourceMode.REPLAY);guidance.status=GuidanceStatus.OFF_ROUTE
+        provider.emit(ContractSamples.telemetry(clock,1))
+        assertEquals(request.end,ends.last());session.close()
+    }
 }

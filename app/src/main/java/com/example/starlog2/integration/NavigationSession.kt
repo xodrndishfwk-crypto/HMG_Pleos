@@ -32,22 +32,53 @@ class NavigationSession(
     private var arrivalRoute: String? = null
     private var seq = 0L
     private var paused = false
+    private var sampleReceivedAt = 0L
+    private val ownedResources = mutableListOf<AutoCloseable>()
     private val memory = starLog?.let { StarLogCoordinator(it, clock, { block -> submit(block) }, { publish() }) }
 
     private fun submit(block: () -> Unit) {
         if (closed.get()) return
         try { queue.execute { if (!closed.get()) block() } } catch (_: RejectedExecutionException) { }
     }
+    internal fun dispatch(block: () -> Unit) = submit(block)
+    internal fun sourceToken() = sourceGeneration
+    internal fun sourceMode() = source
+    internal fun freshLocation(): TimedValue<LocationFix>? {
+        if (paused) return null
+        val location = sample?.location ?: return null
+        val elapsed = (clock.monotonicMs() - sampleReceivedAt).coerceAtLeast(0)
+        return location.copy(ageMs = (location.ageMs + elapsed).coerceAtMost(MAX_SAFE_INTEGER))
+    }
+    internal fun own(resource: AutoCloseable) {
+        try { queue.execute { if (closed.get()) resource.close() else ownedResources.add(resource) } }
+        catch (_: RejectedExecutionException) { resource.close() }
+    }
+    fun adoptRoute(input: RouteRequest, value: Route, done: (Outcome<Unit>) -> Unit = {}) = submit {
+        done(adoptRouteOnQueue(input, value))
+    }
+    internal fun adoptRouteOnQueue(input: RouteRequest, value: Route): Outcome<Unit> {
+        if (value.requestId != input.requestId) return Outcome.Err(AppError("INVALID_RESPONSE", "navigation.request_mismatch", false, input.requestId))
+        cancel?.cancel(); cancel = null; generation++
+        request = input; route = value; guidance.setRoute(value); arrivalRoute = null; lastRerouteAt = null; error = null
+        state = sample?.let(guidance::update); publish()
+        return Outcome.Ok(Unit)
+    }
+    fun stopGuidance() = submit { stopGuidanceOnQueue() }
+    internal fun stopGuidanceOnQueue() {
+        generation++; cancel?.cancel(); cancel = null; route = null; request = null; arrivalRoute = null; lastRerouteAt = null
+        guidance.clear(); state = GuidanceState(null, GuidanceStatus.IDLE, null, null, null, null, null, null, null)
+        error = null; publish()
+    }
     fun requestRoute(value: RouteRequest) = submit { requestOnQueue(value) }
     private fun requestOnQueue(value: RouteRequest) {
         cancel?.cancel(); val token = ++generation
-        request = value; error = null
+        error = null
         cancel = routes.request(value) { result -> submit {
             if (token != generation) return@submit
             when (result) {
                 is Outcome.Ok -> {
                     if (result.value.requestId != value.requestId) return@submit
-                    route = result.value; guidance.setRoute(result.value); arrivalRoute = null
+                    request = value; route = result.value; guidance.setRoute(result.value); arrivalRoute = null
                     state = sample?.let(guidance::update)
                 }
                 is Outcome.Err -> error = result.error
@@ -81,7 +112,7 @@ class NavigationSession(
     }
     private fun consume(value: Telemetry) {
         if (!cursor.accept(value)) return
-        sample = value; state = guidance.update(value)
+        sample = value; sampleReceivedAt = clock.monotonicMs(); state = guidance.update(value)
         memory?.telemetry(value)
         val current = state
         if (current?.status == GuidanceStatus.ARRIVED && current.routeId != arrivalRoute) {
@@ -115,6 +146,8 @@ class NavigationSession(
             generation++; sourceGeneration++; cancel?.cancel(); provider?.stop()
             (routes as? AutoCloseable)?.close(); guidance.clear()
             memory?.close()
+            ownedResources.forEach { resource -> runCatching { resource.close() } }
+            ownedResources.clear()
         }
         queue.shutdown()
     }

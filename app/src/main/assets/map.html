@@ -109,6 +109,7 @@
   }
   let lastRenderSeq = -1;
   let renderedRouteId = null;
+  let renderedCoordinates = null;
   let vehicleMarker = null;
   let actionSeq = 0;
   function sendExperience(action, starId = null) {
@@ -141,10 +142,17 @@
     if (e.seq <= lastRenderSeq) return;
     const p = e.payload;
     renderMemories(p);
-    if (p.route && p.route.routeId !== renderedRouteId) {
+    const coordinatesKey = p.route ? JSON.stringify(p.route.coordinates) : null;
+    if (p.route && (p.route.routeId !== renderedRouteId || coordinatesKey !== renderedCoordinates)) {
       const coordinates = p.route.coordinates;
       showRoute({coordinates, lookAhead: coordinates[0], bearing: map.getBearing()});
       renderedRouteId = p.route.routeId;
+      renderedCoordinates = coordinatesKey;
+    } else if (!p.route && renderedRouteId !== null) {
+      for (const id of ['route-main','route-glow','route-shadow']) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource('route')) map.removeSource('route');
+      renderedRouteId = null;
+      renderedCoordinates = null;
     }
     if (p.pose) {
       if (!vehicleMarker) {

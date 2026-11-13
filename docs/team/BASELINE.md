@@ -1,5 +1,7 @@
 # StarLog 승인 시작 기준
 
+[확실] 2026-11-13 추가: 목적지 검색/경로 선택 유틸리티 PR #18 수락 및 동시성 보완. HIGH 연결 API·시험·남은 실제 서비스 선택은 [목적지 선택 검토](NAVIGATION_DESTINATION_VALIDATION.md)를 우선 확인한다. G1 계약/fixture 및 아래 최초 승인 값은 유지한다.
+
 [확실] 최신 인수 상태(2026-11-11): N2/I1 및 S2-G1-r2 PR13/I2 PR16 통합·검증 완료. S2 r1 저장 오류는 수정·재검증했고 [최신 S2/I2 보고](STARLOG_R2_I2_VALIDATION.md)를 우선 확인한다. I2 검증 코드 merge는53434201314aaf8d22866402d0653d44bb705b36이며 이후 문서 commit과 구분한다. 전체서비스 DONE/실차 검증 완료는 아니다. 아래 G1 최초 승인 값과 [이전 r1 인수 보고](HIGH_PC_INTAKE_REPORT.md)는 이력이다. 계약/fixture는 그대로이며 현재 도구26개는 [HARNESS_MANIFEST](../g1/HARNESS_MANIFEST.json), SHA256 a99ecd2e21b0c84717f11b99a7202b5cd3ef844a4a606bf45ce30a9f637cfe48다. Verify-G1.ps1로 원본 contract6/fixture13과 현재 도구를 함께 확인한다.
 
 [확실] G1 공통 기반 READY · baselineRevision g1-20261110.1 · 승인 HIGH_PC · 2026-11-10 KST. 공통 코드와 입력의 준비 승인이다. Navigation v2 수락·전체 서비스 완료와 구분한다.

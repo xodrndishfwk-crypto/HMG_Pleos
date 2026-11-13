@@ -36,6 +36,13 @@ class GlNavigationActivity : AppCompatActivity() {
     private var latestRender: com.example.starlog2.contracts.RenderEnvelope? = null
     private lateinit var maneuverLabel: TextView
     private var navigationStarted = false
+    /** Bind the designed page without introducing a second route request or changing its layout. */
+    fun connectDestinationSearch(
+        provider: com.example.starlog2.navigation.DestinationSearchProvider,
+        observe: (com.example.starlog2.integration.DestinationState) -> Unit,
+    ) = com.example.starlog2.integration.DestinationFlow(navigation, provider, routeProviderFactory(), { state ->
+        runOnUiThread { if (!destroyed) observe(state) }
+    })
     private val receivedActions = linkedSetOf<String>()
     private fun newNavigation() = com.example.starlog2.integration.NavigationSession(
         routeProviderFactory(),

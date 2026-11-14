@@ -1,19 +1,42 @@
 # StarLog 별자리 멜로디 v1 관리 노드 인수 보고
 
-작성일: 2026-11-14 KST
-상태: `HANDOFF_READY` — 기능 커밋 완료, Android SDK 환경 검증 대기, integration 미통합
+최초 작성일: 2026-11-14 KST
+게시 복구 갱신일: 2026-11-15 KST
+상태: `HANDOFF_READY` revision 2 — 원격 게시 복구, Android SDK 환경 검증 대기, integration 미통합
+
+## Revision 2 — 원격 게시 복구
+
+HIGH_PC가 기능 ref와 SHA를 찾지 못한 직접 원인은 원본 개발 환경의
+`feat/starlog-melody-v1` 브랜치가 로컬에만 있고 origin에 push되지 않았기 때문이다.
+로컬 커밋이나 인수 정보가 사라진 것은 아니었으며 다음 객체를 모두 확인했다.
+
+- 기준 SHA `80657e1d765fe64b881238314d69a358335a994b`
+- 기능 SHA `5e8044f3da2935580212e90310c5b4b9c2bfd91f`
+- 최초 인수서 SHA `12d6fde4fad831f23f05e209ad58499a86e0380c`
+
+2026-11-15 KST에 기능 브랜치를 force 없이 origin에 일반 push했다. push 직후 실제
+`git ls-remote`에서 feature ref가 `12d6fde4...`를 가리키는 것과 fetch 성공을 확인했다.
+같은 시점의 최신 원격 integration은 `ede0b01f2cd5efcd5eae09631c5ed29d00b7d3a9`다.
+
+최신 integration은 최초 기준 이후 destination navigation 변경이 추가됐지만 최초 기준
+`80657e1d...`의 후손이다. 기능 브랜치와 최신 integration의 merge-base는
+`80657e1d...`이며 `git merge-tree --write-tree`는 충돌 없이 결과 tree를 생성했다.
+기능 브랜치를 최신 integration 위로 임의 rebase하지 않았고 integration에도 push하지 않았다.
 
 ## 전달 식별자
 
 ```text
 [HANDOFF_READY]
 handoffId: H-MELODY-V1-20261114-01
+revision: 2
 taskId: H7-MELODY-V1
 from: CODEX_HIGH
 to: MANAGE_NODE / HIGH_PC
 branch: feat/starlog-melody-v1
 codeSHA: 5e8044f3da2935580212e90310c5b4b9c2bfd91f
 baseSHA: 80657e1d765fe64b881238314d69a358335a994b
+latestRemoteIntegrationSHA: ede0b01f2cd5efcd5eae09631c5ed29d00b7d3a9
+mergeBaseSHA: 80657e1d765fe64b881238314d69a358335a994b
 targetBranch: integration/starlog-v1
 contractVersion: starlog-contracts-1.0.0 (변경 없음)
 contractHarnessHash: a99ecd2e21b0c84717f11b99a7202b5cd3ef844a4a606bf45ce30a9f637cfe48
@@ -103,7 +126,7 @@ if (result.melody != null) {
 
 | 항목 | 결과 |
 |---|---|
-| 브랜치 분리 | `feat/starlog-melody-v1`을 승인 integration SHA 바로 위에 생성 |
+| 브랜치 분리 | 기능 SHA는 기준 `80657e1d...`의 직접 후손이며 최신 integration과 merge-base는 해당 기준 SHA |
 | 커밋 형식 | `feat(starlog): add constellation melody studio` |
 | 패키지 배치 | 계산/UI 보조는 `starlog/melody`, 저장은 기존 `starlog/storage` |
 | UI 관례 | 기존 프로젝트와 동일한 programmatic Activity/Canvas 방식 |
@@ -133,6 +156,8 @@ if (result.melody != null) {
 | 메모리 저장/재시작/마이그레이션 스모크 | PASS, schema=3 |
 | `tools/Verify-G1.ps1` | PASS, 26 files, hash `a99ecd...7cfe48` |
 | `git diff --check` | PASS |
+| origin feature 게시 및 `ls-remote` | PASS — 최초 인수서 tip `12d6fde4...` 확인 후 revision 2 갱신 |
+| 최신 integration 자동 merge-tree | PASS — 결과 tree 생성, 충돌 없음 |
 | Gradle JVM/lint/assemble | NOT_RUN — 이 PC에 Android SDK 경로 없음 |
 | Android SQLite 계측시험 | NOT_RUN — SDK/에뮬레이터 필요 |
 | 실제 차량/실차 | NOT_RUN |
@@ -147,8 +172,9 @@ Define ANDROID_HOME or sdk.dir in local.properties.
 
 ## 관리 노드 다음 행동
 
-1. `5e8044f3da2935580212e90310c5b4b9c2bfd91f`가 `80657e1d...`의 직접 후손인지 확인한다.
-2. Android SDK가 있는 HIGH_PC에서 아래 검사를 실행한다.
+1. `git fetch origin` 후 원격 feature ref와 이 보고서 revision 2의 최종 handoff commit을 확인한다.
+2. `5e8044f3da2935580212e90310c5b4b9c2bfd91f`가 `80657e1d...`의 직접 후손이고 최신 integration과의 merge-base도 `80657e1d...`인지 확인한다.
+3. Android SDK가 있는 HIGH_PC에서 아래 검사를 실행한다.
 
 ```powershell
 .\tools\Verify-G1.ps1
@@ -156,9 +182,9 @@ Define ANDROID_HOME or sdk.dir in local.properties.
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-3. 계측시험에서 v2 DB→v3 업그레이드, 기본 악보 JSON 왕복, 별자리 metadata upsert 후 악보 보존을 확인한다.
-4. 1700×1184 IVI에서 컨트롤 잘림, 오선·덧줄, 회전/조성/화음 임계값, 오디오 lifecycle을 확인한다.
-5. 통과 시 integration 대상 PR로 수락한다. SDK 검증 전에는 `ACCEPTED/INTEGRATED/DONE`으로 기록하지 않는다.
+4. 계측시험에서 v2 DB→v3 업그레이드, 기본 악보 JSON 왕복, 별자리 metadata upsert 후 악보 보존을 확인한다.
+5. 1700×1184 IVI에서 컨트롤 잘림, 오선·덧줄, 회전/조성/화음 임계값, 오디오 lifecycle을 확인한다.
+6. 통과 시 integration 대상 PR로 수락한다. SDK 검증 전에는 `ACCEPTED/INTEGRATED/DONE`으로 기록하지 않는다.
 
 ## 알려진 제한과 미구현
 

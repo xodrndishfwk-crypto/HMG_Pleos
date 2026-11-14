@@ -14,7 +14,6 @@ import android.widget.Spinner
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.example.starlog2.contracts.MemoryStar
 import com.example.starlog2.contracts.Outcome
 import com.example.starlog2.contracts.SourceMode
 import com.example.starlog2.starlog.melody.BaseMelody
@@ -26,14 +25,14 @@ import com.example.starlog2.starlog.melody.ArrangementRhythm
 import com.example.starlog2.starlog.melody.MelodyCanvasView
 import com.example.starlog2.starlog.melody.MelodyConfig
 import com.example.starlog2.starlog.melody.MelodyGenerator
+import com.example.starlog2.starlog.melody.MelodyInputProjector
 import com.example.starlog2.starlog.melody.MelodyKey
+import com.example.starlog2.starlog.melody.MelodyPlaybackSession
 import com.example.starlog2.starlog.melody.MelodyPreviewPlayer
 import com.example.starlog2.starlog.melody.MelodyStar
-import com.example.starlog2.starlog.model.Constellation
-import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
 import java.util.concurrent.Executors
-import kotlin.math.cos
+import java.util.concurrent.TimeUnit
 
 class MelodyStudioActivity : AppCompatActivity() {
     private lateinit var canvas: MelodyCanvasView
@@ -49,9 +48,13 @@ class MelodyStudioActivity : AppCompatActivity() {
     private lateinit var thresholdSeek: SeekBar
     private lateinit var keySpinner: Spinner
     private lateinit var resetButton: Button
-    private val repository by lazy { SqliteMemoryRepository(applicationContext) }
+    private lateinit var repository: SqliteMemoryRepository
     private val io = Executors.newSingleThreadExecutor()
     private val player = MelodyPreviewPlayer()
+    private val playback = MelodyPlaybackSession(
+        playAction = { melody, shouldContinue -> player.play(melody, shouldContinue) },
+        stopAction = player::close,
+    )
     private var constellationId: String? = null
     private var stars: List<MelodyStar> = emptyList()
     private var preview: BaseMelody? = null
@@ -63,6 +66,7 @@ class MelodyStudioActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+        repository = SqliteMemoryRepository(applicationContext)
         setContentView(buildUi())
         loadLatestConstellation()
     }
@@ -127,7 +131,7 @@ class MelodyStudioActivity : AppCompatActivity() {
         autoButton = actionButton("자동 회전") { optimize() }
         playButton = actionButton("♪ 미리 듣기") {
             val current = preview
-            if (current != null) io.execute { player.play(current) }
+            if (current != null) playback.play(current)
         }
         confirmButton = actionButton("기본 멜로디 확정") { confirmCurrent() }
         arrangeButton = actionButton("편곡 설정") { showArrangementDialog() }
@@ -236,34 +240,16 @@ class MelodyStudioActivity : AppCompatActivity() {
         for (mode in listOf(SourceMode.LIVE, SourceMode.REPLAY)) {
             val constellationResult = repository.listConstellations(mode)
             val starResult = repository.listStars(mode)
-            if (constellationResult !is Outcome.Ok || starResult !is Outcome.Ok) continue
+            val visitResult = repository.listVisits(mode)
+            if (constellationResult !is Outcome.Ok || starResult !is Outcome.Ok || visitResult !is Outcome.Ok) continue
             val pair = constellationResult.value.maxByOrNull { it.first.createdAtMs } ?: continue
-            val converted = project(pair.first, pair.second, starResult.value)
+            val converted = MelodyInputProjector.project(pair.first, pair.second, starResult.value, visitResult.value)
             if (converted.size >= 2) {
                 val saved = (repository.loadBaseMelody(pair.first.id) as? Outcome.Ok)?.value
                 return LoadedConstellation(pair.first.id, converted, saved)
             }
         }
         return null
-    }
-
-    private fun project(
-        constellation: Constellation,
-        members: List<ConstellationMember>,
-        storedStars: List<MemoryStar>,
-    ): List<MelodyStar> {
-        val starsById = storedStars.associateBy { it.id }
-        val cosLatitude = cos(Math.toRadians(constellation.centerPoint.lat))
-        return members.sortedBy { it.orderIndex }.mapNotNull { member ->
-            val star = starsById[member.starId] ?: return@mapNotNull null
-            MelodyStar(
-                starId = star.id,
-                originalX = (star.point.lon - constellation.centerPoint.lon) * cosLatitude * 111_320.0,
-                originalY = -(star.point.lat - constellation.centerPoint.lat) * 110_540.0,
-                connectionOrder = member.orderIndex,
-                createdAtMs = star.createdAtMs,
-            )
-        }
     }
 
     private fun config() = MelodyConfig(
@@ -408,11 +394,38 @@ class MelodyStudioActivity : AppCompatActivity() {
         resetButton.isEnabled = enabled
     }
 
+    override fun onResume() {
+        super.onResume()
+        playback.activate()
+    }
+
+    override fun onPause() {
+        playback.deactivate()
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        player.close()
-        repository.close()
-        io.shutdown()
+        playback.close()
+        io.shutdownNow()
+        closeRepositoryAfterIoStops()
         super.onDestroy()
+    }
+
+    private fun closeRepositoryAfterIoStops() {
+        val repositoryToClose = repository
+        Thread({
+            try {
+                while (!io.awaitTermination(1, TimeUnit.SECONDS)) {
+                    // Wait off the UI thread so no repository operation races close().
+                }
+                repositoryToClose.close()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }, "starlog-melody-repository-close").apply {
+            isDaemon = true
+            start()
+        }
     }
 
     private companion object { val GOLD = Color.rgb(229, 200, 136) }

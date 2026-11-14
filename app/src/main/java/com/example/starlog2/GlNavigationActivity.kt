@@ -196,6 +196,10 @@ class GlNavigationActivity : AppCompatActivity() {
             setText(R.string.replay_start)
             setOnClickListener { startReplay() }
         })
+        infoPanel.addView(Button(this).apply {
+            text = "별자리 멜로디 스튜디오"
+            setOnClickListener { startActivity(Intent(this@GlNavigationActivity, MelodyStudioActivity::class.java)) }
+        })
         infoPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateAttributionInset() }
         root.addView(infoPanel, FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM).apply {
             val m=(16*d).toInt(); setMargins(m,0,m,m)

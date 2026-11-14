@@ -15,6 +15,7 @@ import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.melody.BaseMelody
 import org.json.JSONObject
 
 /**
@@ -357,10 +358,16 @@ class SqliteMemoryRepository(
                 StarLogDbSchema.TABLE_CONSTELLATIONS,
                 null,
                 cValues,
-                SQLiteDatabase.CONFLICT_REPLACE,
+                SQLiteDatabase.CONFLICT_IGNORE,
             )
             if (cRow == -1L) {
-                throw IllegalStateException("Failed to insert Constellation ${constellation.id}")
+                val updated = db.update(
+                    StarLogDbSchema.TABLE_CONSTELLATIONS,
+                    cValues,
+                    "id = ?",
+                    arrayOf(constellation.id),
+                )
+                if (updated != 1) throw IllegalStateException("Failed to upsert Constellation ${constellation.id}")
             }
 
             db.delete(
@@ -445,6 +452,71 @@ class SqliteMemoryRepository(
         Outcome.Ok(results)
     } catch (e: Exception) {
         Outcome.Err(storageError("storage.list_constellations_failed"))
+    }
+
+    override fun saveBaseMelody(melody: BaseMelody): Outcome<Unit> {
+        val db = try { writableDatabase } catch (e: Exception) {
+            return Outcome.Err(storageError("storage.open_failed"))
+        }
+        db.beginTransaction()
+        return try {
+            var existingId: String? = null
+            db.query(
+                StarLogDbSchema.TABLE_BASE_MELODIES,
+                arrayOf("id"),
+                "constellation_id = ?",
+                arrayOf(melody.constellationId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) existingId = cursor.getString(0) }
+            if (existingId != null && existingId != melody.id) {
+                throw IllegalStateException("A confirmed base melody already exists for ${melody.constellationId}")
+            }
+            val values = ContentValues().apply {
+                put("id", melody.id)
+                put("constellation_id", melody.constellationId)
+                put("algorithm_version", melody.algorithmVersion)
+                put("payload_json", BaseMelodyJson.encode(melody))
+            }
+            db.insertWithOnConflict(
+                StarLogDbSchema.TABLE_BASE_MELODIES,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE,
+            ).also { if (it == -1L) throw IllegalStateException("Failed to save base melody") }
+            db.setTransactionSuccessful()
+            Outcome.Ok(Unit)
+        } catch (e: Exception) {
+            Outcome.Err(storageError("storage.save_base_melody_failed"))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?> = try {
+        var value: BaseMelody? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_BASE_MELODIES,
+            arrayOf("payload_json"),
+            "constellation_id = ?",
+            arrayOf(constellationId),
+            null, null, null,
+        ).use { cursor -> if (cursor.moveToFirst()) value = BaseMelodyJson.decode(cursor.getString(0)) }
+        Outcome.Ok(value)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_base_melody_failed"))
+    }
+
+    override fun listBaseMelodies(): Outcome<List<BaseMelody>> = try {
+        val values = mutableListOf<BaseMelody>()
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_BASE_MELODIES,
+            arrayOf("payload_json"),
+            null, null, null, null,
+            "id ASC",
+        ).use { cursor -> while (cursor.moveToNext()) values += BaseMelodyJson.decode(cursor.getString(0)) }
+        Outcome.Ok(values)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_base_melodies_failed"))
     }
 
     private fun findVisitByDedupeKey(db: SQLiteDatabase, dedupeKey: String): Visit? {

@@ -8,6 +8,8 @@ import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.melody.MelodyGenerator
+import com.example.starlog2.starlog.melody.MelodyStar
 import com.example.starlog2.starlog.storage.StarLogDbSchema
 import com.example.starlog2.starlog.storage.StorageSnapshot
 import com.example.starlog2.starlog.storage.TransactionalMemoryRepository
@@ -312,5 +314,42 @@ class MemoryRepositoryTest {
         assertEquals("Original Live Place", liveStars.single().title)
         assertTrue((repo.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
         assertTrue((repo.listStars(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+    }
+
+    @Test
+    fun saveBaseMelody_persistsOneConfirmedIdentityPerConstellationAcrossRestart() {
+        val snapshot = StorageSnapshot()
+        val repo = TransactionalMemoryRepository(snapshot)
+        val firstStar = (repo.saveVisit(StarLogFixtures.createVisit(id = "melody-a", dedupeKey = "melody-a")) as Outcome.Ok).value
+        val secondStar = (repo.saveVisit(StarLogFixtures.createVisit(id = "melody-b", dedupeKey = "melody-b")) as Outcome.Ok).value
+        val constellation = Constellation(
+            id = "constellation-melody",
+            kind = ConstellationKind.TRIP_ROUTE,
+            label = "Test score",
+            tripId = "trip-melody",
+            centerPoint = StarLogFixtures.SEOUL_CITY_HALL,
+            createdAtMs = 1_700_000_000_000L,
+            sourceMode = SourceMode.LIVE,
+        )
+        repo.saveConstellation(
+            constellation,
+            listOf(
+                ConstellationMember(constellation.id, firstStar.id, 0),
+                ConstellationMember(constellation.id, secondStar.id, 1),
+            ),
+        )
+        val melody = MelodyGenerator().generate(
+            constellation.id,
+            listOf(MelodyStar(firstStar.id, 0.0, 0.0, 0), MelodyStar(secondStar.id, 100.0, 50.0, 1)),
+        ).melody!!
+
+        assertTrue(repo.saveBaseMelody(melody) is Outcome.Ok)
+        val restarted = TransactionalMemoryRepository(snapshot)
+        assertEquals(melody, (restarted.loadBaseMelody(constellation.id) as Outcome.Ok).value)
+        assertEquals(listOf(melody), (restarted.listBaseMelodies() as Outcome.Ok).value)
+
+        val conflicting = melody.copy(id = "different-confirmed-id", rotationAngleDeg = (melody.rotationAngleDeg + 5) % 360)
+        assertTrue(restarted.saveBaseMelody(conflicting) is Outcome.Err)
+        assertEquals(melody, (restarted.loadBaseMelody(constellation.id) as Outcome.Ok).value)
     }
 }

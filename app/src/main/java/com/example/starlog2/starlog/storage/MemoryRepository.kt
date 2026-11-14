@@ -11,6 +11,7 @@ import com.example.starlog2.contracts.Visit
 import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.melody.BaseMelody
 
 /**
  * Extended domain storage interface inheriting canonical [com.example.starlog2.contracts.MemoryRepository].
@@ -30,6 +31,12 @@ interface StarLogMemoryRepository : MemoryRepository {
     fun listConstellations(
         sourceMode: SourceMode,
     ): Outcome<List<Pair<Constellation, List<ConstellationMember>>>> = Outcome.Ok(emptyList())
+
+    fun saveBaseMelody(melody: BaseMelody): Outcome<Unit>
+
+    fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?>
+
+    fun listBaseMelodies(): Outcome<List<BaseMelody>>
 }
 
 /**
@@ -40,13 +47,15 @@ object StarLogDbSchema {
     const val DATABASE_NAME = "starlog_v1.db"
     const val DATABASE_VERSION_V1 = 1
     const val DATABASE_VERSION_V2 = 2
-    const val CURRENT_DATABASE_VERSION = DATABASE_VERSION_V2
+    const val DATABASE_VERSION_V3 = 3
+    const val CURRENT_DATABASE_VERSION = DATABASE_VERSION_V3
 
     const val TABLE_VISITS = "visits"
     const val TABLE_MEMORY_STARS = "memory_stars"
     const val TABLE_CONSTELLATIONS = "constellations"
     const val TABLE_CONSTELLATION_MEMBERS = "constellation_members"
     const val TABLE_CHECKPOINTS = "checkpoints"
+    const val TABLE_BASE_MELODIES = "base_melodies"
 
     const val DDL_CREATE_VISITS = """
         CREATE TABLE IF NOT EXISTS $TABLE_VISITS (
@@ -110,6 +119,16 @@ object StarLogDbSchema {
         );
     """
 
+    const val DDL_CREATE_BASE_MELODIES = """
+        CREATE TABLE IF NOT EXISTS $TABLE_BASE_MELODIES (
+            id TEXT PRIMARY KEY,
+            constellation_id TEXT NOT NULL UNIQUE,
+            algorithm_version TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            FOREIGN KEY (constellation_id) REFERENCES $TABLE_CONSTELLATIONS(id) ON DELETE CASCADE
+        );
+    """
+
     const val INDEX_VISITS_DEDUPE = """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_dedupe_key ON $TABLE_VISITS(dedupe_key);
     """
@@ -124,6 +143,7 @@ object StarLogDbSchema {
         DDL_CREATE_CONSTELLATIONS,
         DDL_CREATE_CONSTELLATION_MEMBERS,
         DDL_CREATE_CHECKPOINTS,
+        DDL_CREATE_BASE_MELODIES,
         INDEX_VISITS_DEDUPE,
         INDEX_STARS_SOURCE_MODE,
     )
@@ -142,6 +162,9 @@ object StarLogDbSchema {
             statements.add(DDL_CREATE_CONSTELLATION_MEMBERS)
             statements.add(INDEX_STARS_SOURCE_MODE)
         }
+        if (oldVersion < DATABASE_VERSION_V3 && newVersion >= DATABASE_VERSION_V3) {
+            statements.add(DDL_CREATE_BASE_MELODIES)
+        }
         return statements
     }
 }
@@ -158,6 +181,7 @@ data class StorageSnapshot(
     val constellationsById: LinkedHashMap<String, Constellation> = LinkedHashMap(),
     val membersByConstellationId: LinkedHashMap<String, List<ConstellationMember>> = LinkedHashMap(),
     val checkpointsByMode: LinkedHashMap<SourceMode, SessionCheckpoint> = LinkedHashMap(),
+    val melodiesByConstellationId: LinkedHashMap<String, BaseMelody> = LinkedHashMap(),
 ) {
     fun deepCopy(): StorageSnapshot = StorageSnapshot(
         schemaVersion = schemaVersion,
@@ -168,6 +192,7 @@ data class StorageSnapshot(
         constellationsById = LinkedHashMap(constellationsById),
         membersByConstellationId = LinkedHashMap(membersByConstellationId.mapValues { it.value.toList() }),
         checkpointsByMode = LinkedHashMap(checkpointsByMode),
+        melodiesByConstellationId = LinkedHashMap(melodiesByConstellationId),
     )
 }
 
@@ -342,6 +367,29 @@ class TransactionalMemoryRepository(
         Outcome.Err(storageError("storage.list_constellations_failed"))
     }
 
+    override fun saveBaseMelody(melody: BaseMelody): Outcome<Unit> = executeInTransaction { state ->
+        require(state.constellationsById.containsKey(melody.constellationId)) {
+            "Foreign key violation: constellationId ${melody.constellationId} does not exist"
+        }
+        val existing = state.melodiesByConstellationId[melody.constellationId]
+        require(existing == null || existing.id == melody.id) {
+            "A confirmed base melody already exists for ${melody.constellationId}"
+        }
+        state.melodiesByConstellationId[melody.constellationId] = melody
+    }
+
+    override fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?> = try {
+        Outcome.Ok(backingStore.melodiesByConstellationId[constellationId])
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_base_melody_failed"))
+    }
+
+    override fun listBaseMelodies(): Outcome<List<BaseMelody>> = try {
+        Outcome.Ok(backingStore.melodiesByConstellationId.values.sortedBy { it.id })
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_base_melodies_failed"))
+    }
+
     private fun <T> executeInTransaction(
         errorMessageKey: String = "storage.transaction_failed",
         block: (StorageSnapshot) -> T,
@@ -376,6 +424,8 @@ class TransactionalMemoryRepository(
         backingStore.membersByConstellationId.putAll(committed.membersByConstellationId)
         backingStore.checkpointsByMode.clear()
         backingStore.checkpointsByMode.putAll(committed.checkpointsByMode)
+        backingStore.melodiesByConstellationId.clear()
+        backingStore.melodiesByConstellationId.putAll(committed.melodiesByConstellationId)
     }
 
     private fun storageError(messageKey: String): AppError = AppError(

@@ -16,6 +16,8 @@ import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.melody.MelodyGenerator
+import com.example.starlog2.starlog.melody.MelodyStar
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
 import com.example.starlog2.starlog.visit.VisitDetector
 
@@ -41,6 +43,7 @@ object SqliteMemoryRepositoryAndroidTest {
             verifyDedupeKeyUpsertAndNullPreservation(repository)
             verifyCascadeDeleteAndCheckpointPersistence(repository)
             verifyLiveAndReplaySameTimestampDetectorIsolationAndPkConflict(repository)
+            verifyConfirmedMelodyRoundTripAndConstellationUpsert(repository)
         } finally {
             repository.close()
             context.deleteDatabase(TEST_DB_NAME)
@@ -184,6 +187,43 @@ object SqliteMemoryRepositoryAndroidTest {
         }
         check((repository.listStars(SourceMode.LIVE) as Outcome.Ok).value.any { it.visitId == liveVisit.id }) {
             "Expected LIVE star preserved after REPLAY deletion"
+        }
+    }
+
+    private fun verifyConfirmedMelodyRoundTripAndConstellationUpsert(repository: SqliteMemoryRepository) {
+        val visits = listOf(
+            Visit(
+                "melody-visit-a", "melody-dedupe-a", "melody-trip", LatLon(37.50, 127.00),
+                1_900_000_000_000L, 1_900_000_010_000L, SourceMode.REPLAY, null,
+            ),
+            Visit(
+                "melody-visit-b", "melody-dedupe-b", "melody-trip", LatLon(37.51, 127.02),
+                1_900_000_020_000L, 1_900_000_040_000L, SourceMode.REPLAY, null,
+            ),
+        )
+        val stars = visits.map { (repository.saveVisit(it) as Outcome.Ok).value }
+        val constellation = Constellation(
+            id = "melody-constellation",
+            kind = ConstellationKind.TRIP_ROUTE,
+            label = "Melody round trip",
+            tripId = "melody-trip",
+            centerPoint = LatLon(37.505, 127.01),
+            createdAtMs = 1_900_000_050_000L,
+            sourceMode = SourceMode.REPLAY,
+        )
+        val members = stars.mapIndexed { index, star -> ConstellationMember(constellation.id, star.id, index) }
+        check(repository.saveConstellation(constellation, members) is Outcome.Ok)
+        val melody = MelodyGenerator().generate(
+            constellation.id,
+            stars.mapIndexed { index, star -> MelodyStar(star.id, index * 100.0, index * 30.0, index, star.createdAtMs) },
+        ).melody!!
+        check(repository.saveBaseMelody(melody) is Outcome.Ok) { "saveBaseMelody failed" }
+        check((repository.loadBaseMelody(constellation.id) as Outcome.Ok).value == melody) { "Base melody JSON round trip failed" }
+
+        // Updating constellation metadata must not use SQLite REPLACE and cascade-delete its confirmed melody.
+        check(repository.saveConstellation(constellation.copy(label = "Updated label"), members) is Outcome.Ok)
+        check((repository.loadBaseMelody(constellation.id) as Outcome.Ok).value == melody) {
+            "Constellation upsert deleted the confirmed melody"
         }
     }
 }

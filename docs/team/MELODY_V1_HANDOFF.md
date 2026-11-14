@@ -32,6 +32,7 @@ revision: 2
 taskId: H7-MELODY-V1
 from: CODEX_HIGH
 to: MANAGE_NODE / HIGH_PC
+PR: https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/20
 branch: feat/starlog-melody-v1
 codeSHA: 5e8044f3da2935580212e90310c5b4b9c2bfd91f
 baseSHA: 80657e1d765fe64b881238314d69a358335a994b

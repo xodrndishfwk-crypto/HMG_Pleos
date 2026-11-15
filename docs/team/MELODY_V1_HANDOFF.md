@@ -2,7 +2,125 @@
 
 최초 작성일: 2026-11-14 KST
 게시 복구 갱신일: 2026-11-15 KST
-상태: `HANDOFF_READY` revision 2 — 원격 게시 복구, Android SDK 환경 검증 대기, integration 미통합
+수정 재인수 갱신일: 2026-11-15 KST
+상태: `HANDOFF_READY` revision 3 — M1/M2 수정 및 SQLite 시험 보완, Android SDK 환경 재검증 대기, integration 미통합
+
+## Revision 3 — MANAGE_NODE 검토 후 수정
+
+MANAGE_NODE revision 2 검토의 상세 보고서와 PR 댓글을 확인하고 다음을 수정했다.
+
+- 관리 보고서: `docs/melody-v1-manage-r2` 브랜치의 `docs/team/MELODY_V1_MANAGE_NODE_REPORT.md`
+- 관리 결과: https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/20#issuecomment-6879735573
+- 이전 기능 SHA: `5e8044f3da2935580212e90310c5b4b9c2bfd91f`
+- revision 3 기능 SHA: `3b53d380b5a246f7e620db1df1d15551237ff352`
+
+### M1 — 실제 앱 입력 경로의 체류 시간 보존
+
+`MelodyStudioActivity`가 동일 `SourceMode`의 `Visit` 목록을 함께 조회하도록 수정했다.
+새 순수 변환기 `MelodyInputProjector`는 `MemoryStar.visitId`로 Visit을 연결하고
+`endAtMs - startAtMs`를 실제 `dwellTimeMs`로 전달한다. 연결되는 동일 모드 Visit이
+없으면 값을 만들거나 0으로 채우지 않고 `null`을 유지한다.
+
+JVM 테스트와 독립 스모크에서 서로 다른 양수 체류 시간을 가진 합성 Visit이 다음 경로를
+통과한 뒤에도 같은 값을 유지하는 것을 확인했다.
+
+```text
+Visit → MemoryStar → MelodyInputProjector(실제 Activity 사용)
+→ MelodyStar → MelodyGenerator → MelodyNote
+```
+
+같은 시험에서 `starId`, `connectionOrder`, `createdAtMs` 보존과 REPLAY Visit을 LIVE
+별자리 체류 시간에 사용하지 않는 것도 확인했다. 공통 contract와 DB schema는 변경하지 않았다.
+
+### M2 — 미리 듣기 생명주기와 대기 작업
+
+관리 노드가 지적한 위험을 다음 최소 구조로 보완했다.
+
+- 저장소 I/O/생성 executor와 오디오 미리 듣기 executor를 분리했다.
+- `MelodyPlaybackSession`이 세대 번호와 `Future.cancel(true)`로 최신 재생 요청만 유효하게 한다.
+- 새 재생 요청은 기존 재생과 대기 요청을 중단한다.
+- `onPause()`에서 대기 재생을 무효화하고 현재 `AudioTrack`을 정리한다.
+- `onResume()` 이후에만 새 재생 요청을 받는다.
+- PCM 생성 중 주기적으로 취소 상태를 확인하며, 무효화된 요청은 `AudioTrack`을 시작하지 않는다.
+- `onDestroy()`는 playback을 닫고 I/O 큐를 `shutdownNow()`로 취소한다.
+- repository는 UI thread를 막지 않는 정리 thread에서 실행 중 I/O 종료를 기다린 뒤 닫는다.
+- 반복 `deactivate()`/`close()`와 중복 자원 정리가 안전하게 동작한다.
+
+JVM 상태 전이 스모크에서 연속 요청 중 마지막 요청만 실행되고 pause/deactivate 전에
+대기하던 요청이 실행되지 않는 것을 확인했다. 실제 Android AudioTrack 청취·pause/stop/
+destroy/재진입 검증은 이 환경에 Android SDK/기기가 없어 `NOT_RUN`이며 HIGH_PC에 위임한다.
+누수나 crash가 실제 기기에서 재현됐다고 주장하지 않는다.
+
+### SQLite 계측시험 보완
+
+기존 `SqliteMemoryRepositoryAndroidTest.verifyAll()`은
+`StarLogAcceptanceInstrumentedTest.delegatedSqliteSuite()`에서 실제 계측 진입점으로 호출된다.
+해당 스위트에 다음을 추가했다.
+
+- base_melodies가 없는 실제 v2 합성 DB 파일 생성 후 v3 upgrade
+- 기존 Visit/MemoryStar/Constellation/ConstellationMember 행 보존
+- `base_melodies` 테이블 생성 확인
+- 모든 `BaseMelody` 필드 JSON round-trip
+- repository close/reopen 후 확정 멜로디 복원
+- constellation metadata upsert 후 확정 멜로디 보존
+- 같은 별자리에 다른 melody ID 저장 거부와 원본 보존
+- LIVE/REPLAY 분리 상태 유지
+- 기존 v1 migration 시험의 기대 DB 버전을 현재 schema version 3으로 수정
+
+시험 코드는 실제 사용자 DB가 아닌 전용 DB 이름만 사용하며 `finally`에서 해당 합성 DB만 삭제한다.
+
+### Revision 3 변경 파일
+
+```text
+app/src/main/java/com/example/starlog2/MelodyStudioActivity.kt
+app/src/main/java/com/example/starlog2/starlog/melody/MelodyInputProjector.kt
+app/src/main/java/com/example/starlog2/starlog/melody/MelodyPlaybackSession.kt
+app/src/main/java/com/example/starlog2/starlog/melody/MelodyPreviewPlayer.kt
+app/src/test/java/com/example/starlog2/starlog/melody/MelodyInputProjectorTest.kt
+app/src/test/java/com/example/starlog2/starlog/melody/MelodyPlaybackSessionTest.kt
+app/src/androidTest/java/com/example/starlog2/StarLogAcceptanceInstrumentedTest.kt
+app/src/androidTest/java/com/example/starlog2/starlog/SqliteMemoryRepositoryAndroidTest.kt
+docs/team/MELODY_V1_HANDOFF.md
+```
+
+### Revision 3 검증 결과
+
+| 검사 | 결과 |
+|---|---|
+| `tools/Verify-G1.ps1` | PASS, exit 0, 26 files, hash `a99ecd...7cfe48` |
+| Android 독립 Kotlin 컴파일 | PASS, exit 0, Gradle 9.6 배포본의 Kotlin compiler 사용 |
+| revision 3 M1/M2 합성 스모크 | PASS, exit 0, 체류시간 7000/13000ms 보존·마지막 재생만 실행·deactivate 대기 요청 취소 |
+| `git diff --check` | PASS |
+| 선택 JVM Gradle 시험 | NOT_RUN, launcher exit 1 — 이 환경에서 Android SDK 경로/설치물을 찾지 못해 task dependency 결정 전 중단 |
+| 전체 JVM/lint/assemble/androidTest 빌드 | NOT_RUN, launcher exit 1 — 동일 SDK location 오류 |
+| connected Android 계측시험 | NOT_RUN, launcher exit 1 — 동일 SDK location 오류 |
+| 실제 SQLite v2→v3 계측 실행 | NOT_RUN — Android SDK/에뮬레이터 필요 |
+| 1700×1184 UI/AudioTrack/내비 회귀 | NOT_RUN — Android SDK/기기 필요 |
+
+이번 환경의 Gradle 실패는 MANAGE_NODE 환경에서 보고된 ZIP lock/daemon/ADB 장애와 다르다.
+이 환경에서는 Gradle launcher가 실행됐으나 `SDK location not found`로 Android task가 시작되지 않았다.
+
+## Revision 3 전달 식별자
+
+```text
+[HANDOFF_READY]
+handoffId: H-MELODY-V1-20261114-01
+revision: 3
+taskId: H7-MELODY-V1
+from: NAVIGATION_NODE (멜로디 v1 수정 담당)
+to: MANAGE_NODE / HIGH_PC
+PR: https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/20
+branch: feat/starlog-melody-v1
+previousCodeSHA: 5e8044f3da2935580212e90310c5b4b9c2bfd91f
+codeSHA: 3b53d380b5a246f7e620db1df1d15551237ff352
+baseSHA: 80657e1d765fe64b881238314d69a358335a994b
+latestRemoteIntegrationSHAAtRevision: ede0b01f2cd5efcd5eae09631c5ed29d00b7d3a9
+mergeBaseSHA: 80657e1d765fe64b881238314d69a358335a994b
+targetBranch: integration/starlog-v1
+contractVersion: starlog-contracts-1.0.0 (변경 없음)
+contractHarnessHash: a99ecd2e21b0c84717f11b99a7202b5cd3ef844a4a606bf45ce30a9f637cfe48
+integrationStatus: NOT_INTEGRATED
+```
 
 ## Revision 2 — 원격 게시 복구
 
@@ -23,7 +141,7 @@ HIGH_PC가 기능 ref와 SHA를 찾지 못한 직접 원인은 원본 개발 환
 `80657e1d...`이며 `git merge-tree --write-tree`는 충돌 없이 결과 tree를 생성했다.
 기능 브랜치를 최신 integration 위로 임의 rebase하지 않았고 integration에도 push하지 않았다.
 
-## 전달 식별자
+## Revision 2 전달 식별자 (이력)
 
 ```text
 [HANDOFF_READY]
@@ -147,7 +265,7 @@ if (result.melody != null) {
 6. SQLite 부모 행 `REPLACE`로 확정 악보가 삭제될 수 있는 문제를 비파괴 upsert로 수정했다.
 7. 기존 내비 feature 브랜치 부모를 제거하고 integration 기준 위로 음악 커밋만 재배치했다.
 
-## 검증 증거
+## Revision 2 검증 증거 (이력)
 
 | 검사 | 결과 |
 |---|---|
@@ -171,10 +289,10 @@ SDK location not found.
 Define ANDROID_HOME or sdk.dir in local.properties.
 ```
 
-## 관리 노드 다음 행동
+## Revision 3 수신 노드 다음 행동
 
-1. `git fetch origin` 후 원격 feature ref와 이 보고서 revision 2의 최종 handoff commit을 확인한다.
-2. `5e8044f3da2935580212e90310c5b4b9c2bfd91f`가 `80657e1d...`의 직접 후손이고 최신 integration과의 merge-base도 `80657e1d...`인지 확인한다.
+1. `git fetch origin` 후 원격 feature ref와 이 보고서 revision 3의 최종 handoff commit을 확인한다.
+2. revision 3 code SHA `3b53d380...`가 이전 기능 SHA `5e8044f3...`의 후손이고 최신 integration과의 merge-base가 `80657e1d...`인지 확인한다.
 3. Android SDK가 있는 HIGH_PC에서 아래 검사를 실행한다.
 
 ```powershell
@@ -183,8 +301,8 @@ Define ANDROID_HOME or sdk.dir in local.properties.
 .\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-4. 계측시험에서 v2 DB→v3 업그레이드, 기본 악보 JSON 왕복, 별자리 metadata upsert 후 악보 보존을 확인한다.
-5. 1700×1184 IVI에서 컨트롤 잘림, 오선·덧줄, 회전/조성/화음 임계값, 오디오 lifecycle을 확인한다.
+4. 계측시험에서 실제 v2 합성 DB→v3 업그레이드, 기존 행 보존, JSON 왕복, close/reopen, metadata upsert, 다른 ID 거부, LIVE/REPLAY 격리를 확인한다.
+5. 1700×1184 IVI에서 컨트롤 잘림, 오선·덧줄, 회전/조성/화음 임계값과 연속 재생/pause/stop/destroy/재진입을 확인한다.
 6. 통과 시 integration 대상 PR로 수락한다. SDK 검증 전에는 `ACCEPTED/INTEGRATED/DONE`으로 기록하지 않는다.
 
 ## 알려진 제한과 미구현

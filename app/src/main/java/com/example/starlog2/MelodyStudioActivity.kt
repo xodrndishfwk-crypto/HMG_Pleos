@@ -3,6 +3,8 @@ package com.example.starlog2
 import android.animation.ValueAnimator
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -139,32 +141,40 @@ class MelodyStudioActivity : AppCompatActivity() {
         fun dp(value: Int) = (value * density).toInt()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(7, 9, 14))
-            setPadding(dp(18), dp(12), dp(18), dp(14))
+            setBackgroundColor(Color.rgb(4, 7, 13))
+            setPadding(dp(16), dp(10), dp(16), dp(12))
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(TextView(this).apply {
-            text = "✦ StarLog  ·  MUSIC BOX SCORE"
-            textSize = 22f
+            text = "✦ StarLog"
+            textSize = 18f
             setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(studioTab("여정 · 별자리", false))
+        header.addView(studioTab("주행 · 기억의 숲", false))
+        header.addView(studioTab("여정 종료 · 오토 음악", true))
         generationSourceLabel = TextView(this).apply {
             text = "DEMO MOCK"
-            textSize = 13f
-            setTextColor(Color.rgb(130, 220, 255))
-            setPadding(dp(10), 0, dp(16), 0)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(GOLD)
+            background = studioPanel(Color.rgb(9, 13, 21), Color.rgb(36, 42, 54), 18)
+            setPadding(dp(14), 0, dp(14), 0)
         }
-        header.addView(generationSourceLabel)
+        header.addView(generationSourceLabel, LinearLayout.LayoutParams(dp(128), dp(34)).apply { marginStart = dp(16) })
         stateLabel = TextView(this).apply {
             text = "불러오는 중"
-            textSize = 15f
+            textSize = 12f
             setTextColor(GOLD)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            maxLines = 1
         }
-        header.addView(stateLabel)
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
+        header.addView(stateLabel, LinearLayout.LayoutParams(dp(178), -1).apply { marginStart = dp(12) })
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(52)))
 
         canvas = MelodyCanvasView(this)
         root.addView(canvas, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -274,10 +284,35 @@ class MelodyStudioActivity : AppCompatActivity() {
 
     private fun actionButton(label: String, action: () -> Unit) = Button(this).apply {
         text = label
+        textSize = 12f
         setTextColor(Color.WHITE)
         isAllCaps = false
+        minWidth = 0
+        minimumWidth = 0
+        minHeight = 0
+        minimumHeight = 0
+        setPadding(dpLocal(10), 0, dpLocal(10), 0)
+        background = studioPanel(Color.rgb(12, 17, 27), Color.rgb(47, 53, 66), 12)
         setOnClickListener { action() }
     }
+
+    private fun studioTab(value: String, selected: Boolean) = TextView(this).apply {
+        text = value
+        textSize = 12f
+        gravity = Gravity.CENTER
+        setTextColor(if (selected) Color.WHITE else Color.rgb(132, 142, 158))
+        background = if (selected) studioPanel(Color.rgb(17, 22, 32), Color.rgb(118, 101, 67), 18) else null
+        setPadding(dpLocal(14), 0, dpLocal(14), 0)
+    }
+
+    private fun studioPanel(fill: Int, stroke: Int, radiusDp: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(fill)
+        setStroke(dpLocal(1), stroke)
+        cornerRadius = dpLocal(radiusDp).toFloat()
+    }
+
+    private fun dpLocal(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     private fun toggle(label: String, checked: Boolean, action: () -> Unit) = CheckBox(this).apply {
         text = label

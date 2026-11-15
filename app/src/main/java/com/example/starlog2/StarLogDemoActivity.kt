@@ -4,14 +4,17 @@ import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.starlog2.contracts.Outcome
@@ -63,68 +66,138 @@ class StarLogDemoActivity : AppCompatActivity() {
     private fun buildUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(18), dp(24), dp(18))
-            setBackgroundColor(Color.rgb(7, 12, 26))
+            setPadding(dp(16), dp(10), dp(16), dp(12))
+            setBackgroundColor(BACKGROUND)
         }
-        root.addView(TextView(this).apply {
-            text = "STARLOG · 제출 시연"
-            textSize = 30f
-            setTextColor(Color.rgb(241, 212, 140))
-        })
-        root.addView(TextView(this).apply {
-            text = "DEMO REPLAY · 구미 → 부산 → 복귀"
-            textSize = 15f
-            setTextColor(Color.LTGRAY)
-        })
-        state = label("시연 여정을 시작해 주세요.", 21f, Color.WHITE)
-        progress = label("기록 0 / 9", 16f, Color.rgb(170, 200, 235))
-        root.addView(state)
-        root.addView(progress)
+        root.addView(buildTopBar(), LinearLayout.LayoutParams(-1, dp(52)))
 
-        root.addView(LinearLayout(this).apply {
+        val stage = FrameLayout(this).apply {
+            background = panelBackground(Color.rgb(5, 9, 17), BORDER, 16)
+        }
+        constellation = DemoConstellationView()
+        stage.addView(constellation, FrameLayout.LayoutParams(-1, -1))
+        val stageCopy = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(28), dp(24), dp(12), 0)
+            addView(label("CONSTELLATION FORGING · DEMO REPLAY", 11f, MUTED).apply {
+                letterSpacing = 0.12f
+            })
+            addView(label("오늘의 별자리 여정", 25f, Color.WHITE).apply {
+                typeface = Typeface.DEFAULT_BOLD
+            })
+        }
+        stage.addView(
+            stageCopy,
+            FrameLayout.LayoutParams(dp(390), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START),
+        )
+        root.addView(stage, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = panelBackground(PANEL, BORDER, 14)
+        }
+        val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(label("재생 속도", 14f, Color.LTGRAY))
-            listOf(4, 8, 16).forEach { value ->
-                addView(Button(this@StarLogDemoActivity).apply {
-                    text = "${value}×"
-                    setOnClickListener { speed = value; state.text = "${value}× 시연 속도 선택" }
-                })
-            }
-        })
+        }
+        state = label("시연 여정을 시작해 주세요.", 15f, Color.WHITE).apply {
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+        }
+        progress = label("기록 0 / 9", 13f, GOLD).apply { gravity = Gravity.END }
+        statusRow.addView(state, LinearLayout.LayoutParams(0, -2, 1f))
+        statusRow.addView(progress, LinearLayout.LayoutParams(dp(300), -2))
+        dock.addView(statusRow, LinearLayout.LayoutParams(-1, dp(36)))
 
-        journeyButton = Button(this).apply {
-            text = "여정 시작"
-            setOnClickListener { startOrContinue() }
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        finishButton = Button(this).apply {
-            text = "여정 명시적 종료"
+        actionRow.addView(label("SPEED", 11f, MUTED), LinearLayout.LayoutParams(dp(54), -2))
+        listOf(4, 8, 16).forEach { value ->
+            actionRow.addView(demoButton("${value}×", compact = true) {
+                speed = value
+                state.text = "${value}× 시연 속도 · 음성 START 준비"
+            }, LinearLayout.LayoutParams(dp(58), dp(38)).apply { marginEnd = dp(6) })
+        }
+
+        journeyButton = demoButton("여정 시작") { startOrContinue() }
+        finishButton = demoButton("명시적 종료", accent = true) { finishJourney() }.apply {
             isEnabled = false
-            setOnClickListener { finishJourney() }
         }
-        melodyButton = Button(this).apply {
-            text = "별자리 회전 · 오선지 · DEMO MOCK 음악"
+        melodyButton = demoButton("별자리 음악") {
+            val record = displayedRecord ?: return@demoButton
+            startActivity(Intent(this@StarLogDemoActivity, MelodyStudioActivity::class.java).apply {
+                putExtra(MelodyStudioActivity.EXTRA_CONSTELLATION_ID, record.constellationId)
+                putExtra(MelodyStudioActivity.EXTRA_SOURCE_MODE, record.sourceMode.name)
+            })
+        }.apply {
             isEnabled = false
-            setOnClickListener {
-                val record = displayedRecord ?: return@setOnClickListener
-                startActivity(Intent(this@StarLogDemoActivity, MelodyStudioActivity::class.java).apply {
-                    putExtra(MelodyStudioActivity.EXTRA_CONSTELLATION_ID, record.constellationId)
-                    putExtra(MelodyStudioActivity.EXTRA_SOURCE_MODE, record.sourceMode.name)
-                })
-            }
         }
-        memoryButton = Button(this).apply {
-            text = "별 선택 · 사진 추억"
+        memoryButton = demoButton("기억의 숲") {
+            startActivity(Intent(this@StarLogDemoActivity, StarMemoryActivity::class.java))
+        }.apply {
             isEnabled = false
-            setOnClickListener { startActivity(Intent(this@StarLogDemoActivity, StarMemoryActivity::class.java)) }
         }
-        root.addView(journeyButton)
-        root.addView(finishButton)
-        root.addView(melodyButton)
-        root.addView(memoryButton)
-        constellation = DemoConstellationView()
-        root.addView(constellation, LinearLayout.LayoutParams(-1, dp(230)))
-        return ScrollView(this).apply { addView(root) }
+        listOf(journeyButton, finishButton, melodyButton, memoryButton).forEach { button ->
+            actionRow.addView(button, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(7) })
+        }
+        dock.addView(actionRow, LinearLayout.LayoutParams(-1, dp(44)))
+        root.addView(dock, LinearLayout.LayoutParams(-1, dp(96)).apply { topMargin = dp(8) })
+        return root
+    }
+
+    private fun buildTopBar() = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(label("✦ StarLog", 18f, Color.WHITE).apply {
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.04f
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(navTab("여정 · 별자리", selected = true))
+        addView(navTab("주행 · 기억의 숲", selected = false))
+        addView(navTab("여정 종료 · 오토 음악", selected = false))
+        addView(label("●  Ambient Sync · Gold #E5C888", 11f, GOLD).apply {
+            gravity = Gravity.CENTER
+            background = panelBackground(Color.rgb(10, 15, 24), BORDER, 18)
+            setPadding(dp(14), 0, dp(14), 0)
+        }, LinearLayout.LayoutParams(dp(238), dp(34)).apply { marginStart = dp(18) })
+    }
+
+    private fun navTab(value: String, selected: Boolean) = TextView(this).apply {
+        text = value
+        textSize = 12f
+        gravity = Gravity.CENTER
+        setTextColor(if (selected) Color.WHITE else MUTED)
+        background = if (selected) panelBackground(Color.rgb(17, 22, 32), GOLD_DIM, 18) else null
+        setPadding(dp(15), 0, dp(15), 0)
+    }
+
+    private fun demoButton(
+        value: String,
+        accent: Boolean = false,
+        compact: Boolean = false,
+        action: () -> Unit,
+    ) = Button(this).apply {
+        text = value
+        textSize = if (compact) 11f else 12f
+        isAllCaps = false
+        minWidth = 0
+        minimumWidth = 0
+        minHeight = 0
+        minimumHeight = 0
+        setPadding(dp(8), 0, dp(8), 0)
+        setTextColor(if (accent) Color.rgb(10, 12, 16) else Color.WHITE)
+        background = panelBackground(if (accent) GOLD else Color.rgb(12, 17, 27), if (accent) GOLD else BORDER, 12)
+        setOnClickListener { action() }
+    }
+
+    private fun panelBackground(fill: Int, stroke: Int, radiusDp: Int) = GradientDrawable().apply {
+        shape = GradientDrawable.RECTANGLE
+        setColor(fill)
+        setStroke(dp(1), stroke)
+        cornerRadius = dp(radiusDp).toFloat()
     }
 
     private fun startOrContinue() {
@@ -323,29 +396,90 @@ class StarLogDemoActivity : AppCompatActivity() {
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            canvas.drawColor(Color.rgb(5, 9, 17))
+            drawStarField(canvas)
             val points = record?.points?.filter { it.createsNewStar }.orEmpty()
-            if (points.isEmpty()) return
-            val pad = 28f
+            if (points.isEmpty()) {
+                drawHome(canvas)
+                return
+            }
+            val padX = width * 0.18f
+            val padTop = height * 0.25f
+            val padBottom = height * 0.18f
             val minLon = points.minOf { it.point.lon }
             val maxLon = points.maxOf { it.point.lon }
             val minLat = points.minOf { it.point.lat }
             val maxLat = points.maxOf { it.point.lat }
-            fun x(lon: Double) = pad + ((lon - minLon) / (maxLon - minLon).coerceAtLeast(.001) * (width - pad * 2)).toFloat()
-            fun y(lat: Double) = height - pad - ((lat - minLat) / (maxLat - minLat).coerceAtLeast(.001) * (height - pad * 2)).toFloat()
-            paint.color = Color.rgb(80, 126, 184); paint.strokeWidth = 4f
+            fun x(lon: Double) = padX + ((lon - minLon) / (maxLon - minLon).coerceAtLeast(.001) * (width - padX * 2)).toFloat()
+            fun y(lat: Double) = height - padBottom - ((lat - minLat) / (maxLat - minLat).coerceAtLeast(.001) * (height - padTop - padBottom)).toFloat()
+            paint.color = GOLD_DIM
+            paint.strokeWidth = dp(2).toFloat()
             points.filter { it.leg.name == "OUTBOUND" }.zipWithNext().forEach { (a, b) ->
                 canvas.drawLine(x(a.point.lon), y(a.point.lat), x(b.point.lon), y(b.point.lat), paint)
             }
             points.firstOrNull { it.label == "부산" }?.let { busan ->
                 points.firstOrNull { it.label == "김해" }?.let { gimhae ->
-                    paint.color = Color.rgb(229, 200, 136)
+                    paint.color = CYAN
                     canvas.drawLine(x(busan.point.lon), y(busan.point.lat), x(gimhae.point.lon), y(gimhae.point.lat), paint)
                 }
             }
             points.forEach {
+                paint.color = Color.argb(38, 229, 200, 136)
+                canvas.drawCircle(x(it.point.lon), y(it.point.lat), dp(18).toFloat(), paint)
+                paint.color = GOLD
+                canvas.drawCircle(x(it.point.lon), y(it.point.lat), dp(6).toFloat(), paint)
                 paint.color = Color.WHITE
-                canvas.drawCircle(x(it.point.lon), y(it.point.lat), 9f, paint)
+                canvas.drawCircle(x(it.point.lon), y(it.point.lat), dp(2).toFloat(), paint)
+                paint.textAlign = Paint.Align.CENTER
+                paint.textSize = dp(11).toFloat()
+                paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                canvas.drawText(it.label, x(it.point.lon), y(it.point.lat) + dp(28), paint)
             }
         }
+
+        private fun drawStarField(canvas: Canvas) {
+            paint.typeface = Typeface.DEFAULT
+            repeat(86) { index ->
+                val x = ((index * 83 + 29) % 997) / 997f * width
+                val y = ((index * 47 + 71) % 541) / 541f * height
+                val bright = 45 + (index * 17 % 95)
+                paint.color = Color.argb(bright, 205, 220, 236)
+                canvas.drawCircle(x, y, if (index % 13 == 0) 2.2f else 1.1f, paint)
+            }
+        }
+
+        private fun drawHome(canvas: Canvas) {
+            val cx = width * 0.58f
+            val cy = height * 0.53f
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = dp(1).toFloat()
+            paint.color = Color.argb(130, 125, 108, 72)
+            canvas.drawCircle(cx, cy, height * 0.25f, paint)
+            canvas.drawCircle(cx, cy, height * 0.18f, paint)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(45, 229, 200, 136)
+            canvas.drawCircle(cx, cy, dp(28).toFloat(), paint)
+            paint.color = GOLD
+            canvas.drawCircle(cx, cy, dp(7).toFloat(), paint)
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            paint.textSize = dp(31).toFloat()
+            paint.color = Color.WHITE
+            canvas.drawText("StarLog", cx, cy + dp(52), paint)
+            paint.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            paint.textSize = dp(12).toFloat()
+            paint.color = MUTED
+            canvas.drawText("오늘의 밤하늘을 드라이브합니다", cx, cy + dp(78), paint)
+        }
+    }
+
+    private companion object {
+        val BACKGROUND = Color.rgb(4, 7, 13)
+        val PANEL = Color.rgb(9, 13, 21)
+        val BORDER = Color.rgb(36, 42, 54)
+        val MUTED = Color.rgb(132, 142, 158)
+        val GOLD = Color.rgb(229, 200, 136)
+        val GOLD_DIM = Color.rgb(118, 101, 67)
+        val CYAN = Color.rgb(115, 207, 221)
     }
 }

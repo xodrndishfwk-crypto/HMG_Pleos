@@ -280,7 +280,7 @@ PASS: G1; 124 JVM; lint 0; assemble; 21 connected; gateway 2; mock UI/audio; fai
 FAIL: cross-origin token; untrusted backend override; MIME integrity; inherited U1
 NOT_RUN: Gleo approval/voice/unmasked payload; Android failure/stress matrix; physical car; live Suno
 knownIssues: F1-F5 in this report
-reportCommitSHA: TO_BE_FILLED_AFTER_COMMIT
+reportCommitSHA: a841fa83ee52f414ca9a31d495ff687a4364eed9
 userChangesPreserved: YES
 receiverNextAction: NAVIGATION_NODE fixes F1-F3; HIGH_PC completes Gleo/U1/device gates
 integrationStatus: NOT_INTEGRATED

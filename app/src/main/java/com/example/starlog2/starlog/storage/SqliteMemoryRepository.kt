@@ -15,6 +15,17 @@ import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.journey.ConstellationEdgeKind
+import com.example.starlog2.starlog.journey.JourneyLeg
+import com.example.starlog2.starlog.journey.JourneyPoint
+import com.example.starlog2.starlog.journey.JourneyRecord
+import com.example.starlog2.starlog.journey.JourneyStatus
+import com.example.starlog2.starlog.journey.StarPhoto
+import com.example.starlog2.starlog.journey.StoredConstellationEdge
+import com.example.starlog2.starlog.melody.BaseMelody
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicJson
+import com.example.starlog2.starlog.music.AiMusicStatus
 import org.json.JSONObject
 
 /**
@@ -357,10 +368,16 @@ class SqliteMemoryRepository(
                 StarLogDbSchema.TABLE_CONSTELLATIONS,
                 null,
                 cValues,
-                SQLiteDatabase.CONFLICT_REPLACE,
+                SQLiteDatabase.CONFLICT_IGNORE,
             )
             if (cRow == -1L) {
-                throw IllegalStateException("Failed to insert Constellation ${constellation.id}")
+                val updated = db.update(
+                    StarLogDbSchema.TABLE_CONSTELLATIONS,
+                    cValues,
+                    "id = ?",
+                    arrayOf(constellation.id),
+                )
+                if (updated != 1) throw IllegalStateException("Failed to upsert Constellation ${constellation.id}")
             }
 
             db.delete(
@@ -445,6 +462,371 @@ class SqliteMemoryRepository(
         Outcome.Ok(results)
     } catch (e: Exception) {
         Outcome.Err(storageError("storage.list_constellations_failed"))
+    }
+
+    override fun saveBaseMelody(melody: BaseMelody): Outcome<Unit> {
+        val db = try { writableDatabase } catch (e: Exception) {
+            return Outcome.Err(storageError("storage.open_failed"))
+        }
+        db.beginTransaction()
+        return try {
+            var existingId: String? = null
+            db.query(
+                StarLogDbSchema.TABLE_BASE_MELODIES,
+                arrayOf("id"),
+                "constellation_id = ?",
+                arrayOf(melody.constellationId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) existingId = cursor.getString(0) }
+            if (existingId != null && existingId != melody.id) {
+                throw IllegalStateException("A confirmed base melody already exists for ${melody.constellationId}")
+            }
+            val values = ContentValues().apply {
+                put("id", melody.id)
+                put("constellation_id", melody.constellationId)
+                put("algorithm_version", melody.algorithmVersion)
+                put("payload_json", BaseMelodyJson.encode(melody))
+            }
+            if (existingId == null) {
+                db.insertOrThrow(StarLogDbSchema.TABLE_BASE_MELODIES, null, values)
+            } else {
+                val updated = db.update(
+                    StarLogDbSchema.TABLE_BASE_MELODIES,
+                    values,
+                    "id = ?",
+                    arrayOf(melody.id),
+                )
+                if (updated != 1) throw IllegalStateException("Failed to update base melody")
+            }
+            db.setTransactionSuccessful()
+            Outcome.Ok(Unit)
+        } catch (e: Exception) {
+            Outcome.Err(storageError("storage.save_base_melody_failed"))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?> = try {
+        var value: BaseMelody? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_BASE_MELODIES,
+            arrayOf("payload_json"),
+            "constellation_id = ?",
+            arrayOf(constellationId),
+            null, null, null,
+        ).use { cursor -> if (cursor.moveToFirst()) value = BaseMelodyJson.decode(cursor.getString(0)) }
+        Outcome.Ok(value)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_base_melody_failed"))
+    }
+
+    override fun listBaseMelodies(): Outcome<List<BaseMelody>> = try {
+        val values = mutableListOf<BaseMelody>()
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_BASE_MELODIES,
+            arrayOf("payload_json"),
+            null, null, null, null,
+            "id ASC",
+        ).use { cursor -> while (cursor.moveToNext()) values += BaseMelodyJson.decode(cursor.getString(0)) }
+        Outcome.Ok(values)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_base_melodies_failed"))
+    }
+
+    override fun saveAiMusicJob(job: AiMusicJob): Outcome<Unit> {
+        val db = try { writableDatabase } catch (e: Exception) {
+            return Outcome.Err(storageError("storage.open_failed"))
+        }
+        db.beginTransaction()
+        return try {
+            var confirmedMelodyId: String? = null
+            db.query(
+                StarLogDbSchema.TABLE_BASE_MELODIES,
+                arrayOf("id"),
+                "constellation_id = ?",
+                arrayOf(job.request.constellationId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) confirmedMelodyId = cursor.getString(0) }
+            require(confirmedMelodyId == job.request.baseMelodyId) {
+                "AI music job must reference the confirmed base melody"
+            }
+
+            var existing: AiMusicJob? = null
+            db.query(
+                StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+                arrayOf("payload_json"),
+                "request_id = ?",
+                arrayOf(job.request.requestId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) existing = AiMusicJson.decodeJob(cursor.getString(0)) }
+            require(existing == null || existing?.request == job.request) {
+                "AI music request identity conflict: ${job.request.requestId}"
+            }
+            require(existing?.status != AiMusicStatus.SUCCEEDED || job.status == AiMusicStatus.SUCCEEDED) {
+                "A completed AI music job cannot regress"
+            }
+
+            val values = ContentValues().apply {
+                put("request_id", job.request.requestId)
+                put("provider_job_id", job.providerJobId)
+                put("constellation_id", job.request.constellationId)
+                put("source_mode", job.request.sourceMode.name)
+                put("base_melody_id", job.request.baseMelodyId)
+                put("status", job.status.name)
+                put("updated_at_ms", job.updatedAtMs)
+                put("payload_json", AiMusicJson.encodeJob(job))
+            }
+            db.insertWithOnConflict(
+                StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE,
+            ).also { if (it == -1L) throw IllegalStateException("Failed to save AI music job") }
+            db.setTransactionSuccessful()
+            Outcome.Ok(Unit)
+        } catch (e: Exception) {
+            Outcome.Err(storageError("storage.save_ai_music_job_failed"))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun loadAiMusicJob(requestId: String): Outcome<AiMusicJob?> = try {
+        var value: AiMusicJob? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+            arrayOf("payload_json"),
+            "request_id = ?",
+            arrayOf(requestId),
+            null, null, null,
+        ).use { cursor -> if (cursor.moveToFirst()) value = AiMusicJson.decodeJob(cursor.getString(0)) }
+        Outcome.Ok(value)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_ai_music_job_failed"))
+    }
+
+    override fun listAiMusicJobs(constellationId: String): Outcome<List<AiMusicJob>> = try {
+        val values = mutableListOf<AiMusicJob>()
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+            arrayOf("payload_json"),
+            "constellation_id = ?",
+            arrayOf(constellationId),
+            null, null,
+            "updated_at_ms DESC, request_id ASC",
+        ).use { cursor -> while (cursor.moveToNext()) values += AiMusicJson.decodeJob(cursor.getString(0)) }
+        Outcome.Ok(values)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_ai_music_jobs_failed"))
+    }
+
+    override fun saveJourney(journey: JourneyRecord): Outcome<Unit> {
+        val db = try { writableDatabase } catch (e: Exception) {
+            return Outcome.Err(storageError("storage.open_failed"))
+        }
+        db.beginTransaction()
+        return try {
+            val existing = loadJourneyFromDb(db, journey.id)
+            require(existing?.status != JourneyStatus.COMPLETED || journey.status == JourneyStatus.COMPLETED) {
+                "A completed journey cannot become active"
+            }
+            require(journey.points.map { it.orderIndex } == journey.points.indices.toList())
+
+            val values = ContentValues().apply {
+                put("id", journey.id)
+                put("constellation_id", journey.constellationId)
+                put("status", journey.status.name)
+                put("source_mode", journey.sourceMode.name)
+                put("started_at_ms", journey.startedAtMs)
+                put("completed_at_ms", journey.completedAtMs)
+            }
+            db.insertWithOnConflict(
+                StarLogDbSchema.TABLE_JOURNEYS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE,
+            ).also { if (it == -1L) error("Failed to save journey") }
+
+            db.delete(StarLogDbSchema.TABLE_JOURNEY_POINTS, "journey_id = ?", arrayOf(journey.id))
+            journey.points.forEach { point ->
+                val pointValues = ContentValues().apply {
+                    put("journey_id", journey.id)
+                    put("order_index", point.orderIndex)
+                    put("label", point.label)
+                    put("lat", point.point.lat)
+                    put("lon", point.point.lon)
+                    put("visited_at_ms", point.visitedAtMs)
+                    put("leg", point.leg.name)
+                    put("star_id", point.starId)
+                    put("creates_new_star", if (point.createsNewStar) 1 else 0)
+                }
+                db.insertOrThrow(StarLogDbSchema.TABLE_JOURNEY_POINTS, null, pointValues)
+            }
+
+            db.delete(
+                StarLogDbSchema.TABLE_CONSTELLATION_EDGES,
+                "constellation_id = ?",
+                arrayOf(journey.constellationId),
+            )
+            journey.edges.forEach { edge ->
+                val edgeValues = ContentValues().apply {
+                    put("constellation_id", edge.constellationId)
+                    put("order_index", edge.orderIndex)
+                    put("from_star_id", edge.fromStarId)
+                    put("to_star_id", edge.toStarId)
+                    put("kind", edge.kind.name)
+                }
+                db.insertOrThrow(StarLogDbSchema.TABLE_CONSTELLATION_EDGES, null, edgeValues)
+            }
+            db.setTransactionSuccessful()
+            Outcome.Ok(Unit)
+        } catch (e: Exception) {
+            Outcome.Err(storageError("storage.save_journey_failed"))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun loadJourney(journeyId: String): Outcome<JourneyRecord?> = try {
+        Outcome.Ok(loadJourneyFromDb(readableDatabase, journeyId))
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_journey_failed"))
+    }
+
+    override fun loadLatestJourney(sourceMode: SourceMode): Outcome<JourneyRecord?> = try {
+        var id: String? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_JOURNEYS,
+            arrayOf("id"),
+            "source_mode = ?",
+            arrayOf(sourceMode.name),
+            null,
+            null,
+            "started_at_ms DESC, id DESC",
+            "1",
+        ).use { cursor -> if (cursor.moveToFirst()) id = cursor.getString(0) }
+        Outcome.Ok(id?.let { loadJourneyFromDb(readableDatabase, it) })
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_journey_failed"))
+    }
+
+    override fun saveStarPhoto(photo: StarPhoto): Outcome<Unit> = try {
+        var existing: StarPhoto? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_STAR_PHOTOS,
+            arrayOf("id", "star_id", "file_path", "created_at_ms"),
+            "id = ?",
+            arrayOf(photo.id),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                existing = StarPhoto(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getLong(3))
+            }
+        }
+        require(existing == null || existing == photo) { "Star photo identity conflict" }
+        if (existing == null) {
+            val values = ContentValues().apply {
+                put("id", photo.id)
+                put("star_id", photo.starId)
+                put("file_path", photo.filePath)
+                put("created_at_ms", photo.createdAtMs)
+            }
+            writableDatabase.insertWithOnConflict(
+                StarLogDbSchema.TABLE_STAR_PHOTOS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_ABORT,
+            ).also { if (it == -1L) error("Failed to save photo") }
+        }
+        Outcome.Ok(Unit)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.save_star_photo_failed"))
+    }
+
+    override fun listStarPhotos(starId: String): Outcome<List<StarPhoto>> = try {
+        val photos = mutableListOf<StarPhoto>()
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_STAR_PHOTOS,
+            arrayOf("id", "star_id", "file_path", "created_at_ms"),
+            "star_id = ?",
+            arrayOf(starId),
+            null,
+            null,
+            "created_at_ms ASC, id ASC",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                photos += StarPhoto(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getLong(3))
+            }
+        }
+        Outcome.Ok(photos)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_star_photos_failed"))
+    }
+
+    private fun loadJourneyFromDb(db: SQLiteDatabase, journeyId: String): JourneyRecord? {
+        var header: JourneyRecord? = null
+        db.query(
+            StarLogDbSchema.TABLE_JOURNEYS,
+            arrayOf("id", "constellation_id", "status", "source_mode", "started_at_ms", "completed_at_ms"),
+            "id = ?",
+            arrayOf(journeyId),
+            null,
+            null,
+            null,
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                header = JourneyRecord(
+                    id = cursor.getString(0),
+                    constellationId = cursor.getString(1),
+                    status = JourneyStatus.valueOf(cursor.getString(2)),
+                    sourceMode = SourceMode.valueOf(cursor.getString(3)),
+                    startedAtMs = cursor.getLong(4),
+                    completedAtMs = if (cursor.isNull(5)) null else cursor.getLong(5),
+                    points = emptyList(),
+                    edges = emptyList(),
+                )
+            }
+        }
+        val found = header ?: return null
+        val points = mutableListOf<JourneyPoint>()
+        db.query(
+            StarLogDbSchema.TABLE_JOURNEY_POINTS,
+            arrayOf("journey_id", "order_index", "label", "lat", "lon", "visited_at_ms", "leg", "star_id", "creates_new_star"),
+            "journey_id = ?",
+            arrayOf(journeyId),
+            null,
+            null,
+            "order_index ASC",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                points += JourneyPoint(
+                    cursor.getString(0), cursor.getInt(1), cursor.getString(2),
+                    LatLon(cursor.getDouble(3), cursor.getDouble(4)), cursor.getLong(5),
+                    JourneyLeg.valueOf(cursor.getString(6)), cursor.getString(7), cursor.getInt(8) != 0,
+                )
+            }
+        }
+        val edges = mutableListOf<StoredConstellationEdge>()
+        db.query(
+            StarLogDbSchema.TABLE_CONSTELLATION_EDGES,
+            arrayOf("constellation_id", "order_index", "from_star_id", "to_star_id", "kind"),
+            "constellation_id = ?",
+            arrayOf(found.constellationId),
+            null,
+            null,
+            "order_index ASC",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                edges += StoredConstellationEdge(
+                    cursor.getString(0), cursor.getInt(1), cursor.getString(2), cursor.getString(3),
+                    ConstellationEdgeKind.valueOf(cursor.getString(4)),
+                )
+            }
+        }
+        return found.copy(points = points, edges = edges)
     }
 
     private fun findVisitByDedupeKey(db: SQLiteDatabase, dedupeKey: String): Visit? {

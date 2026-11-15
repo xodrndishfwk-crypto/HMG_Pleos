@@ -46,7 +46,7 @@ class StarLogAcceptanceInstrumentedTest {
             SqliteMemoryRepository(context,name).use { repository ->
                 val visits=(repository.listVisits(SourceMode.LIVE) as Outcome.Ok).value
                 assertEquals("old",visits.single().id); assertNull(visits.single().label)
-                assertEquals(2,repository.readableDatabase.version)
+                assertEquals(StarLogDbSchema.CURRENT_DATABASE_VERSION,repository.readableDatabase.version)
                 repository.writableDatabase.execSQL("CREATE TRIGGER fail_star BEFORE INSERT ON memory_stars BEGIN SELECT RAISE(ABORT,'synthetic failure'); END")
                 val result=repository.saveVisit(Visit("rollback","rollback",null,LatLon(37.5,127.0),3,4,SourceMode.LIVE,null))
                 assertTrue(result is Outcome.Err)

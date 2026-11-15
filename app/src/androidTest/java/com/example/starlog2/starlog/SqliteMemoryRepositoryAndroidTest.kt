@@ -16,7 +16,22 @@ import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.demo.SubmissionDemoJourney
+import com.example.starlog2.starlog.journey.ConstellationEdgeKind
+import com.example.starlog2.starlog.journey.JourneyStatus
+import com.example.starlog2.starlog.journey.StarPhoto
+import com.example.starlog2.starlog.melody.MelodyGenerator
+import com.example.starlog2.starlog.melody.MelodyStar
+import com.example.starlog2.starlog.melody.ArrangementGenre
+import com.example.starlog2.starlog.melody.ArrangementInstrument
+import com.example.starlog2.starlog.melody.ArrangementPreferences
+import com.example.starlog2.starlog.melody.ArrangementRhythm
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicRequestFactory
+import com.example.starlog2.starlog.music.AiMusicResult
+import com.example.starlog2.starlog.music.AiMusicStatus
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
+import com.example.starlog2.starlog.storage.StarLogDbSchema
 import com.example.starlog2.starlog.visit.VisitDetector
 
 /**
@@ -33,18 +48,55 @@ import com.example.starlog2.starlog.visit.VisitDetector
 object SqliteMemoryRepositoryAndroidTest {
 
     private const val TEST_DB_NAME = "starlog_memory_instrumented_test.db"
+    private const val MIGRATION_DB_NAME = "starlog_memory_v2_to_current_test.db"
 
     fun verifyAll(context: Context) {
         context.deleteDatabase(TEST_DB_NAME)
-        val repository = SqliteMemoryRepository(context = context, databaseName = TEST_DB_NAME)
         try {
-            verifyDedupeKeyUpsertAndNullPreservation(repository)
-            verifyCascadeDeleteAndCheckpointPersistence(repository)
-            verifyLiveAndReplaySameTimestampDetectorIsolationAndPkConflict(repository)
+            val melody = SqliteMemoryRepository(context = context, databaseName = TEST_DB_NAME).use { repository ->
+                verifyDedupeKeyUpsertAndNullPreservation(repository)
+                verifyCascadeDeleteAndCheckpointPersistence(repository)
+                verifyLiveAndReplaySameTimestampDetectorIsolationAndPkConflict(repository)
+                val confirmed = verifyConfirmedMelodyRoundTripAndConstellationUpsert(repository)
+                verifySubmissionDemoJourneyAndPhotoPersistence(repository)
+                confirmed
+            }
+            SqliteMemoryRepository(context = context, databaseName = TEST_DB_NAME).use { reopened ->
+                check((reopened.loadBaseMelody(melody.constellationId) as Outcome.Ok).value == melody) {
+                    "Confirmed melody did not survive repository close/reopen"
+                }
+                val replacement = melody.copy(id = "${melody.id}-replacement")
+                check(reopened.saveBaseMelody(replacement) is Outcome.Err) {
+                    "A different melody ID must not replace the confirmed melody"
+                }
+                check((reopened.loadBaseMelody(melody.constellationId) as Outcome.Ok).value == melody) {
+                    "Rejected replacement mutated the confirmed melody"
+                }
+            }
         } finally {
-            repository.close()
             context.deleteDatabase(TEST_DB_NAME)
         }
+        verifyV2ToCurrentMigrationPreservesRowsAndCreatesMusicTables(context)
+    }
+
+    private fun verifySubmissionDemoJourneyAndPhotoPersistence(repository: SqliteMemoryRepository) {
+        val demo = SubmissionDemoJourney(repository)
+        check(demo.start() is Outcome.Ok)
+        check(demo.complete() is Outcome.Err) { "Journey must reject finish before all points" }
+        repeat(SubmissionDemoJourney.STOPS.size) { check(demo.advance() is Outcome.Ok) }
+        val completed = (demo.complete() as Outcome.Ok).value
+        check(completed.status == JourneyStatus.COMPLETED)
+        check(completed.points.size == 9)
+        check(completed.points.map { it.starId }.distinct().size == 6)
+        check(completed.edges.count { it.kind == ConstellationEdgeKind.OUTBOUND } == 4)
+        check(completed.edges.count { it.kind == ConstellationEdgeKind.BRANCH } == 1)
+        check((demo.complete() as Outcome.Ok).value == completed) { "Repeated finish must be idempotent" }
+        check(repository.saveJourney(completed.copy(status = JourneyStatus.ACTIVE, completedAtMs = null)) is Outcome.Err)
+
+        val starId = completed.points.first().starId
+        val photo = StarPhoto("demo-photo", starId, "files/star-photos/demo.png", completed.completedAtMs!!)
+        check(repository.saveStarPhoto(photo) is Outcome.Ok)
+        check((repository.listStarPhotos(starId) as Outcome.Ok).value == listOf(photo))
     }
 
     private fun verifyDedupeKeyUpsertAndNullPreservation(repository: SqliteMemoryRepository) {
@@ -184,6 +236,199 @@ object SqliteMemoryRepositoryAndroidTest {
         }
         check((repository.listStars(SourceMode.LIVE) as Outcome.Ok).value.any { it.visitId == liveVisit.id }) {
             "Expected LIVE star preserved after REPLAY deletion"
+        }
+    }
+
+    private fun verifyConfirmedMelodyRoundTripAndConstellationUpsert(
+        repository: SqliteMemoryRepository,
+    ): com.example.starlog2.starlog.melody.BaseMelody {
+        val visits = listOf(
+            Visit(
+                "melody-visit-a", "melody-dedupe-a", "melody-trip", LatLon(37.50, 127.00),
+                1_900_000_000_000L, 1_900_000_010_000L, SourceMode.REPLAY, null,
+            ),
+            Visit(
+                "melody-visit-b", "melody-dedupe-b", "melody-trip", LatLon(37.51, 127.02),
+                1_900_000_020_000L, 1_900_000_040_000L, SourceMode.REPLAY, null,
+            ),
+        )
+        val stars = visits.map { (repository.saveVisit(it) as Outcome.Ok).value }
+        val constellation = Constellation(
+            id = "melody-constellation",
+            kind = ConstellationKind.TRIP_ROUTE,
+            label = "Melody round trip",
+            tripId = "melody-trip",
+            centerPoint = LatLon(37.505, 127.01),
+            createdAtMs = 1_900_000_050_000L,
+            sourceMode = SourceMode.REPLAY,
+        )
+        val members = stars.mapIndexed { index, star -> ConstellationMember(constellation.id, star.id, index) }
+        check(repository.saveConstellation(constellation, members) is Outcome.Ok)
+        val melody = MelodyGenerator().generate(
+            constellation.id,
+            stars.mapIndexed { index, star ->
+                MelodyStar(
+                    starId = star.id,
+                    originalX = index * 100.0,
+                    originalY = index * 30.0,
+                    connectionOrder = index,
+                    createdAtMs = star.createdAtMs,
+                    dwellTimeMs = visits[index].endAtMs - visits[index].startAtMs,
+                )
+            },
+        ).melody!!
+        check(repository.saveBaseMelody(melody) is Outcome.Ok) { "saveBaseMelody failed" }
+        check((repository.loadBaseMelody(constellation.id) as Outcome.Ok).value == melody) { "Base melody JSON round trip failed" }
+
+        // Updating constellation metadata must not use SQLite REPLACE and cascade-delete its confirmed melody.
+        check(repository.saveConstellation(constellation.copy(label = "Updated label"), members) is Outcome.Ok)
+        check((repository.loadBaseMelody(constellation.id) as Outcome.Ok).value == melody) {
+            "Constellation upsert deleted the confirmed melody"
+        }
+        return melody
+    }
+
+    private fun verifyV2ToCurrentMigrationPreservesRowsAndCreatesMusicTables(context: Context) {
+        context.deleteDatabase(MIGRATION_DB_NAME)
+        var migratedMelody: com.example.starlog2.starlog.melody.BaseMelody? = null
+        var migratedJob: AiMusicJob? = null
+        try {
+            context.openOrCreateDatabase(MIGRATION_DB_NAME, Context.MODE_PRIVATE, null).use { db ->
+                db.setForeignKeyConstraintsEnabled(true)
+                listOf(
+                    StarLogDbSchema.DDL_CREATE_VISITS,
+                    StarLogDbSchema.DDL_CREATE_MEMORY_STARS,
+                    StarLogDbSchema.DDL_CREATE_CONSTELLATIONS,
+                    StarLogDbSchema.DDL_CREATE_CONSTELLATION_MEMBERS,
+                    StarLogDbSchema.DDL_CREATE_CHECKPOINTS,
+                    StarLogDbSchema.INDEX_VISITS_DEDUPE,
+                    StarLogDbSchema.INDEX_STARS_SOURCE_MODE,
+                ).forEach { sql -> db.execSQL(sql) }
+                db.execSQL(
+                    "INSERT INTO visits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf("legacy-visit-a", "legacy-dedupe-a", "legacy-trip", 37.5, 127.0, 10_000L, 17_000L, "LIVE", null),
+                )
+                db.execSQL(
+                    "INSERT INTO visits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf("legacy-visit-b", "legacy-dedupe-b", "legacy-trip", 37.51, 127.02, 20_000L, 33_000L, "LIVE", null),
+                )
+                db.execSQL(
+                    "INSERT INTO memory_stars VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf("legacy-star-a", "legacy-visit-a", 37.5, 127.0, 17_000L, null, null, "LIVE"),
+                )
+                db.execSQL(
+                    "INSERT INTO memory_stars VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf("legacy-star-b", "legacy-visit-b", 37.51, 127.02, 33_000L, null, null, "LIVE"),
+                )
+                db.execSQL(
+                    "INSERT INTO constellations VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    arrayOf("legacy-constellation", "TRIP_ROUTE", "Legacy", "legacy-trip", 37.505, 127.01, 40_000L, "LIVE"),
+                )
+                db.execSQL(
+                    "INSERT INTO constellation_members VALUES (?, ?, ?)",
+                    arrayOf("legacy-constellation", "legacy-star-a", 0),
+                )
+                db.execSQL(
+                    "INSERT INTO constellation_members VALUES (?, ?, ?)",
+                    arrayOf("legacy-constellation", "legacy-star-b", 1),
+                )
+                db.version = StarLogDbSchema.DATABASE_VERSION_V2
+            }
+
+            SqliteMemoryRepository(context, MIGRATION_DB_NAME).use { repository ->
+                check(repository.readableDatabase.version == StarLogDbSchema.CURRENT_DATABASE_VERSION) {
+                    "Expected real v2 database to upgrade to the current schema"
+                }
+                val visits = (repository.listVisits(SourceMode.LIVE) as Outcome.Ok).value
+                val stars = (repository.listStars(SourceMode.LIVE) as Outcome.Ok).value
+                val constellations = (repository.listConstellations(SourceMode.LIVE) as Outcome.Ok).value
+                check(visits.map { it.id } == listOf("legacy-visit-a", "legacy-visit-b"))
+                check(stars.map { it.id } == listOf("legacy-star-a", "legacy-star-b"))
+                check(constellations.single().second.map { it.starId } == listOf("legacy-star-a", "legacy-star-b"))
+                repository.readableDatabase.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    arrayOf(StarLogDbSchema.TABLE_BASE_MELODIES),
+                ).use { cursor -> check(cursor.moveToFirst()) { "base_melodies table was not created" } }
+                repository.readableDatabase.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    arrayOf(StarLogDbSchema.TABLE_AI_MUSIC_JOBS),
+                ).use { cursor -> check(cursor.moveToFirst()) { "ai_music_jobs table was not created" } }
+                listOf(
+                    StarLogDbSchema.TABLE_JOURNEYS,
+                    StarLogDbSchema.TABLE_JOURNEY_POINTS,
+                    StarLogDbSchema.TABLE_CONSTELLATION_EDGES,
+                    StarLogDbSchema.TABLE_STAR_PHOTOS,
+                ).forEach { table ->
+                    repository.readableDatabase.rawQuery(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        arrayOf(table),
+                    ).use { cursor -> check(cursor.moveToFirst()) { "$table table was not created" } }
+                }
+
+                migratedMelody = MelodyGenerator().generate(
+                    "legacy-constellation",
+                    stars.mapIndexed { index, star ->
+                        val visit = visits.first { it.id == star.visitId }
+                        MelodyStar(
+                            star.id,
+                            index * 100.0,
+                            index * 30.0,
+                            index,
+                            star.createdAtMs,
+                            visit.endAtMs - visit.startAtMs,
+                        )
+                    },
+                ).melody!!
+                check(repository.saveBaseMelody(migratedMelody!!) is Outcome.Ok)
+                val request = AiMusicRequestFactory.create(
+                    migratedMelody!!,
+                    SourceMode.LIVE,
+                    ArrangementPreferences(
+                        ArrangementGenre.AMBIENT,
+                        ArrangementRhythm.STRAIGHT,
+                        listOf(ArrangementInstrument.MUSIC_BOX),
+                        88,
+                    ),
+                    50_000L,
+                )
+                migratedJob = AiMusicJob(
+                    request = request,
+                    provider = "demo-mock",
+                    providerJobId = "migration-job",
+                    status = AiMusicStatus.SUCCEEDED,
+                    results = listOf(
+                        AiMusicResult(
+                            id = "migration-result",
+                            audioUrl = "/migration.wav",
+                            localFilePath = null,
+                            mimeType = "audio/wav",
+                            durationMs = 4_000L,
+                            model = "mock-melody-synth-v1",
+                            createdAtMs = 51_000L,
+                        ),
+                    ),
+                    selectedResultId = "migration-result",
+                    updatedAtMs = 51_000L,
+                )
+                check(repository.saveAiMusicJob(migratedJob!!) is Outcome.Ok)
+                check(repository.saveBaseMelody(migratedMelody!!) is Outcome.Ok)
+                check((repository.loadAiMusicJob(request.requestId) as Outcome.Ok).value == migratedJob) {
+                    "Re-saving the same confirmed melody deleted its AI music result"
+                }
+            }
+
+            SqliteMemoryRepository(context, MIGRATION_DB_NAME).use { reopened ->
+                check((reopened.loadBaseMelody("legacy-constellation") as Outcome.Ok).value == migratedMelody) {
+                    "Migrated v2 database did not preserve the confirmed melody after reopen"
+                }
+                check((reopened.loadAiMusicJob(migratedJob!!.request.requestId) as Outcome.Ok).value == migratedJob) {
+                    "Migrated v2 database did not preserve the AI music job after reopen"
+                }
+                check((reopened.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+                check((reopened.listStars(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
+            }
+        } finally {
+            context.deleteDatabase(MIGRATION_DB_NAME)
         }
     }
 }

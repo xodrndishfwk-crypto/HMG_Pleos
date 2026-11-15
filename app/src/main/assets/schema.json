@@ -1,0 +1,83 @@
+{
+  "packageName": "com.example.starlog2",
+  "appDescription": "Controls a StarLog journey and prepares or plays music derived from its constellation.",
+  "invokeWord": "StarLog",
+  "version": "1.0.0",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "CONTROL_STARLOG_JOURNEY",
+        "description": "Starts, ends, or reports the state of a StarLog journey. Submission mode uses clearly identified REPLAY data.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": ["START", "END", "STATUS"],
+              "description": "The journey control operation."
+            },
+            "sourceMode": {
+              "type": "string",
+              "enum": ["REPLAY"],
+              "description": "The clearly identified submission demonstration data source."
+            }
+          },
+          "required": ["operation"]
+        },
+        "component": "activity"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "PREPARE_CONSTELLATION_MUSIC",
+        "description": "Opens arrangement settings for a confirmed constellation melody and requires user confirmation before generation.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "constellationId": {
+              "type": "string",
+              "description": "The identifier of a recorded constellation to arrange."
+            },
+            "sourceMode": {
+              "type": "string",
+              "enum": ["LIVE", "REPLAY"],
+              "description": "The data source that owns the constellation."
+            },
+            "genre": {
+              "type": "string",
+              "enum": ["AMBIENT", "CLASSICAL", "JAZZ", "POP", "ELECTRONIC"],
+              "description": "The preferred arrangement genre."
+            }
+          },
+          "required": []
+        },
+        "component": "activity"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "PLAY_CONSTELLATION_MUSIC",
+        "description": "Plays the latest saved generated song for a recorded journey constellation.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "constellationId": {
+              "type": "string",
+              "description": "The identifier of a recorded constellation whose generated song should play."
+            },
+            "sourceMode": {
+              "type": "string",
+              "enum": ["LIVE", "REPLAY"],
+              "description": "The data source that owns the constellation."
+            }
+          },
+          "required": []
+        },
+        "component": "activity"
+      }
+    }
+  ]
+}

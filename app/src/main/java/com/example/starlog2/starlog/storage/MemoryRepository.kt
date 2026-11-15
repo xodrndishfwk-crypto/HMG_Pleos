@@ -11,6 +11,11 @@ import com.example.starlog2.contracts.Visit
 import com.example.starlog2.starlog.model.Constellation
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
+import com.example.starlog2.starlog.journey.JourneyRecord
+import com.example.starlog2.starlog.journey.JourneyStatus
+import com.example.starlog2.starlog.journey.StarPhoto
+import com.example.starlog2.starlog.melody.BaseMelody
+import com.example.starlog2.starlog.music.AiMusicJob
 
 /**
  * Extended domain storage interface inheriting canonical [com.example.starlog2.contracts.MemoryRepository].
@@ -30,6 +35,28 @@ interface StarLogMemoryRepository : MemoryRepository {
     fun listConstellations(
         sourceMode: SourceMode,
     ): Outcome<List<Pair<Constellation, List<ConstellationMember>>>> = Outcome.Ok(emptyList())
+
+    fun saveBaseMelody(melody: BaseMelody): Outcome<Unit>
+
+    fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?>
+
+    fun listBaseMelodies(): Outcome<List<BaseMelody>>
+
+    fun saveAiMusicJob(job: AiMusicJob): Outcome<Unit>
+
+    fun loadAiMusicJob(requestId: String): Outcome<AiMusicJob?>
+
+    fun listAiMusicJobs(constellationId: String): Outcome<List<AiMusicJob>>
+
+    fun saveJourney(journey: JourneyRecord): Outcome<Unit>
+
+    fun loadJourney(journeyId: String): Outcome<JourneyRecord?>
+
+    fun loadLatestJourney(sourceMode: SourceMode): Outcome<JourneyRecord?>
+
+    fun saveStarPhoto(photo: StarPhoto): Outcome<Unit>
+
+    fun listStarPhotos(starId: String): Outcome<List<StarPhoto>>
 }
 
 /**
@@ -40,13 +67,22 @@ object StarLogDbSchema {
     const val DATABASE_NAME = "starlog_v1.db"
     const val DATABASE_VERSION_V1 = 1
     const val DATABASE_VERSION_V2 = 2
-    const val CURRENT_DATABASE_VERSION = DATABASE_VERSION_V2
+    const val DATABASE_VERSION_V3 = 3
+    const val DATABASE_VERSION_V4 = 4
+    const val DATABASE_VERSION_V5 = 5
+    const val CURRENT_DATABASE_VERSION = DATABASE_VERSION_V5
 
     const val TABLE_VISITS = "visits"
     const val TABLE_MEMORY_STARS = "memory_stars"
     const val TABLE_CONSTELLATIONS = "constellations"
     const val TABLE_CONSTELLATION_MEMBERS = "constellation_members"
     const val TABLE_CHECKPOINTS = "checkpoints"
+    const val TABLE_BASE_MELODIES = "base_melodies"
+    const val TABLE_AI_MUSIC_JOBS = "ai_music_jobs"
+    const val TABLE_JOURNEYS = "journeys"
+    const val TABLE_JOURNEY_POINTS = "journey_points"
+    const val TABLE_CONSTELLATION_EDGES = "constellation_edges"
+    const val TABLE_STAR_PHOTOS = "star_photos"
 
     const val DDL_CREATE_VISITS = """
         CREATE TABLE IF NOT EXISTS $TABLE_VISITS (
@@ -110,6 +146,83 @@ object StarLogDbSchema {
         );
     """
 
+    const val DDL_CREATE_BASE_MELODIES = """
+        CREATE TABLE IF NOT EXISTS $TABLE_BASE_MELODIES (
+            id TEXT PRIMARY KEY,
+            constellation_id TEXT NOT NULL UNIQUE,
+            algorithm_version TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            FOREIGN KEY (constellation_id) REFERENCES $TABLE_CONSTELLATIONS(id) ON DELETE CASCADE
+        );
+    """
+
+    const val DDL_CREATE_AI_MUSIC_JOBS = """
+        CREATE TABLE IF NOT EXISTS $TABLE_AI_MUSIC_JOBS (
+            request_id TEXT PRIMARY KEY,
+            provider_job_id TEXT,
+            constellation_id TEXT NOT NULL,
+            source_mode TEXT NOT NULL,
+            base_melody_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            updated_at_ms INTEGER NOT NULL,
+            payload_json TEXT NOT NULL,
+            FOREIGN KEY (constellation_id) REFERENCES $TABLE_CONSTELLATIONS(id) ON DELETE CASCADE,
+            FOREIGN KEY (base_melody_id) REFERENCES $TABLE_BASE_MELODIES(id) ON DELETE CASCADE
+        );
+    """
+
+    const val DDL_CREATE_JOURNEYS = """
+        CREATE TABLE IF NOT EXISTS $TABLE_JOURNEYS (
+            id TEXT PRIMARY KEY,
+            constellation_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            source_mode TEXT NOT NULL,
+            started_at_ms INTEGER NOT NULL,
+            completed_at_ms INTEGER
+        );
+    """
+
+    const val DDL_CREATE_JOURNEY_POINTS = """
+        CREATE TABLE IF NOT EXISTS $TABLE_JOURNEY_POINTS (
+            journey_id TEXT NOT NULL,
+            order_index INTEGER NOT NULL,
+            label TEXT NOT NULL,
+            lat REAL NOT NULL,
+            lon REAL NOT NULL,
+            visited_at_ms INTEGER NOT NULL,
+            leg TEXT NOT NULL,
+            star_id TEXT NOT NULL,
+            creates_new_star INTEGER NOT NULL,
+            PRIMARY KEY (journey_id, order_index),
+            FOREIGN KEY (journey_id) REFERENCES $TABLE_JOURNEYS(id) ON DELETE CASCADE,
+            FOREIGN KEY (star_id) REFERENCES $TABLE_MEMORY_STARS(id) ON DELETE RESTRICT
+        );
+    """
+
+    const val DDL_CREATE_CONSTELLATION_EDGES = """
+        CREATE TABLE IF NOT EXISTS $TABLE_CONSTELLATION_EDGES (
+            constellation_id TEXT NOT NULL,
+            order_index INTEGER NOT NULL,
+            from_star_id TEXT NOT NULL,
+            to_star_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            PRIMARY KEY (constellation_id, order_index),
+            FOREIGN KEY (constellation_id) REFERENCES $TABLE_CONSTELLATIONS(id) ON DELETE CASCADE,
+            FOREIGN KEY (from_star_id) REFERENCES $TABLE_MEMORY_STARS(id) ON DELETE RESTRICT,
+            FOREIGN KEY (to_star_id) REFERENCES $TABLE_MEMORY_STARS(id) ON DELETE RESTRICT
+        );
+    """
+
+    const val DDL_CREATE_STAR_PHOTOS = """
+        CREATE TABLE IF NOT EXISTS $TABLE_STAR_PHOTOS (
+            id TEXT PRIMARY KEY,
+            star_id TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            created_at_ms INTEGER NOT NULL,
+            FOREIGN KEY (star_id) REFERENCES $TABLE_MEMORY_STARS(id) ON DELETE CASCADE
+        );
+    """
+
     const val INDEX_VISITS_DEDUPE = """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_dedupe_key ON $TABLE_VISITS(dedupe_key);
     """
@@ -124,6 +237,12 @@ object StarLogDbSchema {
         DDL_CREATE_CONSTELLATIONS,
         DDL_CREATE_CONSTELLATION_MEMBERS,
         DDL_CREATE_CHECKPOINTS,
+        DDL_CREATE_BASE_MELODIES,
+        DDL_CREATE_AI_MUSIC_JOBS,
+        DDL_CREATE_JOURNEYS,
+        DDL_CREATE_JOURNEY_POINTS,
+        DDL_CREATE_CONSTELLATION_EDGES,
+        DDL_CREATE_STAR_PHOTOS,
         INDEX_VISITS_DEDUPE,
         INDEX_STARS_SOURCE_MODE,
     )
@@ -142,6 +261,18 @@ object StarLogDbSchema {
             statements.add(DDL_CREATE_CONSTELLATION_MEMBERS)
             statements.add(INDEX_STARS_SOURCE_MODE)
         }
+        if (oldVersion < DATABASE_VERSION_V3 && newVersion >= DATABASE_VERSION_V3) {
+            statements.add(DDL_CREATE_BASE_MELODIES)
+        }
+        if (oldVersion < DATABASE_VERSION_V4 && newVersion >= DATABASE_VERSION_V4) {
+            statements.add(DDL_CREATE_AI_MUSIC_JOBS)
+        }
+        if (oldVersion < DATABASE_VERSION_V5 && newVersion >= DATABASE_VERSION_V5) {
+            statements.add(DDL_CREATE_JOURNEYS)
+            statements.add(DDL_CREATE_JOURNEY_POINTS)
+            statements.add(DDL_CREATE_CONSTELLATION_EDGES)
+            statements.add(DDL_CREATE_STAR_PHOTOS)
+        }
         return statements
     }
 }
@@ -158,6 +289,10 @@ data class StorageSnapshot(
     val constellationsById: LinkedHashMap<String, Constellation> = LinkedHashMap(),
     val membersByConstellationId: LinkedHashMap<String, List<ConstellationMember>> = LinkedHashMap(),
     val checkpointsByMode: LinkedHashMap<SourceMode, SessionCheckpoint> = LinkedHashMap(),
+    val melodiesByConstellationId: LinkedHashMap<String, BaseMelody> = LinkedHashMap(),
+    val aiMusicJobsByRequestId: LinkedHashMap<String, AiMusicJob> = LinkedHashMap(),
+    val journeysById: LinkedHashMap<String, JourneyRecord> = LinkedHashMap(),
+    val starPhotosById: LinkedHashMap<String, StarPhoto> = LinkedHashMap(),
 ) {
     fun deepCopy(): StorageSnapshot = StorageSnapshot(
         schemaVersion = schemaVersion,
@@ -168,6 +303,10 @@ data class StorageSnapshot(
         constellationsById = LinkedHashMap(constellationsById),
         membersByConstellationId = LinkedHashMap(membersByConstellationId.mapValues { it.value.toList() }),
         checkpointsByMode = LinkedHashMap(checkpointsByMode),
+        melodiesByConstellationId = LinkedHashMap(melodiesByConstellationId),
+        aiMusicJobsByRequestId = LinkedHashMap(aiMusicJobsByRequestId),
+        journeysById = LinkedHashMap(journeysById),
+        starPhotosById = LinkedHashMap(starPhotosById),
     )
 }
 
@@ -342,6 +481,111 @@ class TransactionalMemoryRepository(
         Outcome.Err(storageError("storage.list_constellations_failed"))
     }
 
+    override fun saveBaseMelody(melody: BaseMelody): Outcome<Unit> = executeInTransaction { state ->
+        require(state.constellationsById.containsKey(melody.constellationId)) {
+            "Foreign key violation: constellationId ${melody.constellationId} does not exist"
+        }
+        val existing = state.melodiesByConstellationId[melody.constellationId]
+        require(existing == null || existing.id == melody.id) {
+            "A confirmed base melody already exists for ${melody.constellationId}"
+        }
+        state.melodiesByConstellationId[melody.constellationId] = melody
+    }
+
+    override fun loadBaseMelody(constellationId: String): Outcome<BaseMelody?> = try {
+        Outcome.Ok(backingStore.melodiesByConstellationId[constellationId])
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_base_melody_failed"))
+    }
+
+    override fun listBaseMelodies(): Outcome<List<BaseMelody>> = try {
+        Outcome.Ok(backingStore.melodiesByConstellationId.values.sortedBy { it.id })
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_base_melodies_failed"))
+    }
+
+    override fun saveAiMusicJob(job: AiMusicJob): Outcome<Unit> = executeInTransaction { state ->
+        val melody = state.melodiesByConstellationId[job.request.constellationId]
+        require(melody?.id == job.request.baseMelodyId) {
+            "AI music job must reference the confirmed base melody"
+        }
+        val existing = state.aiMusicJobsByRequestId[job.request.requestId]
+        require(existing == null || existing.request == job.request) {
+            "AI music request identity conflict: ${job.request.requestId}"
+        }
+        require(existing?.status != com.example.starlog2.starlog.music.AiMusicStatus.SUCCEEDED ||
+            job.status == com.example.starlog2.starlog.music.AiMusicStatus.SUCCEEDED) {
+            "A completed AI music job cannot regress"
+        }
+        state.aiMusicJobsByRequestId[job.request.requestId] = job
+    }
+
+    override fun loadAiMusicJob(requestId: String): Outcome<AiMusicJob?> = try {
+        Outcome.Ok(backingStore.aiMusicJobsByRequestId[requestId])
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_ai_music_job_failed"))
+    }
+
+    override fun listAiMusicJobs(constellationId: String): Outcome<List<AiMusicJob>> = try {
+        Outcome.Ok(
+            backingStore.aiMusicJobsByRequestId.values
+                .filter { it.request.constellationId == constellationId }
+                .sortedWith(compareByDescending<AiMusicJob> { it.updatedAtMs }.thenBy { it.request.requestId }),
+        )
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_ai_music_jobs_failed"))
+    }
+
+    override fun saveJourney(journey: JourneyRecord): Outcome<Unit> = executeInTransaction { state ->
+        val existing = state.journeysById[journey.id]
+        require(existing?.status != JourneyStatus.COMPLETED || journey.status == JourneyStatus.COMPLETED) {
+            "A completed journey cannot become active"
+        }
+        require(journey.points.all { it.journeyId == journey.id })
+        require(journey.points.map { it.orderIndex } == journey.points.indices.toList())
+        require(journey.points.all { state.starsById.containsKey(it.starId) })
+        require(journey.edges.all { edge ->
+            edge.constellationId == journey.constellationId &&
+                state.starsById.containsKey(edge.fromStarId) && state.starsById.containsKey(edge.toStarId)
+        })
+        if (journey.status == JourneyStatus.COMPLETED) {
+            require(state.constellationsById.containsKey(journey.constellationId))
+        }
+        state.journeysById[journey.id] = journey
+    }
+
+    override fun loadJourney(journeyId: String): Outcome<JourneyRecord?> = try {
+        Outcome.Ok(backingStore.journeysById[journeyId])
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_journey_failed"))
+    }
+
+    override fun loadLatestJourney(sourceMode: SourceMode): Outcome<JourneyRecord?> = try {
+        Outcome.Ok(
+            backingStore.journeysById.values
+                .filter { it.sourceMode == sourceMode }
+                .maxWithOrNull(compareBy<JourneyRecord> { it.startedAtMs }.thenBy { it.id }),
+        )
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_journey_failed"))
+    }
+
+    override fun saveStarPhoto(photo: StarPhoto): Outcome<Unit> = executeInTransaction { state ->
+        require(state.starsById.containsKey(photo.starId))
+        val existing = state.starPhotosById[photo.id]
+        require(existing == null || existing == photo)
+        state.starPhotosById[photo.id] = photo
+    }
+
+    override fun listStarPhotos(starId: String): Outcome<List<StarPhoto>> = try {
+        Outcome.Ok(
+            backingStore.starPhotosById.values.filter { it.starId == starId }
+                .sortedWith(compareBy<StarPhoto> { it.createdAtMs }.thenBy { it.id }),
+        )
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_star_photos_failed"))
+    }
+
     private fun <T> executeInTransaction(
         errorMessageKey: String = "storage.transaction_failed",
         block: (StorageSnapshot) -> T,
@@ -376,6 +620,14 @@ class TransactionalMemoryRepository(
         backingStore.membersByConstellationId.putAll(committed.membersByConstellationId)
         backingStore.checkpointsByMode.clear()
         backingStore.checkpointsByMode.putAll(committed.checkpointsByMode)
+        backingStore.melodiesByConstellationId.clear()
+        backingStore.melodiesByConstellationId.putAll(committed.melodiesByConstellationId)
+        backingStore.aiMusicJobsByRequestId.clear()
+        backingStore.aiMusicJobsByRequestId.putAll(committed.aiMusicJobsByRequestId)
+        backingStore.journeysById.clear()
+        backingStore.journeysById.putAll(committed.journeysById)
+        backingStore.starPhotosById.clear()
+        backingStore.starPhotosById.putAll(committed.starPhotosById)
     }
 
     private fun storageError(messageKey: String): AppError = AppError(

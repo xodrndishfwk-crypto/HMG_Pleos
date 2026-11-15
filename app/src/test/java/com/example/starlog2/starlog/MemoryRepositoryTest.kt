@@ -10,6 +10,14 @@ import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
 import com.example.starlog2.starlog.melody.MelodyGenerator
 import com.example.starlog2.starlog.melody.MelodyStar
+import com.example.starlog2.starlog.melody.ArrangementGenre
+import com.example.starlog2.starlog.melody.ArrangementInstrument
+import com.example.starlog2.starlog.melody.ArrangementPreferences
+import com.example.starlog2.starlog.melody.ArrangementRhythm
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicRequestFactory
+import com.example.starlog2.starlog.music.AiMusicResult
+import com.example.starlog2.starlog.music.AiMusicStatus
 import com.example.starlog2.starlog.storage.StarLogDbSchema
 import com.example.starlog2.starlog.storage.StorageSnapshot
 import com.example.starlog2.starlog.storage.TransactionalMemoryRepository
@@ -350,6 +358,81 @@ class MemoryRepositoryTest {
 
         val conflicting = melody.copy(id = "different-confirmed-id", rotationAngleDeg = (melody.rotationAngleDeg + 5) % 360)
         assertTrue(restarted.saveBaseMelody(conflicting) is Outcome.Err)
+        assertEquals(melody, (restarted.loadBaseMelody(constellation.id) as Outcome.Ok).value)
+    }
+
+    @Test
+    fun saveAiMusicJob_restoresResultWithoutReplacingConfirmedMelodyAndRejectsStateRegression() {
+        val snapshot = StorageSnapshot()
+        val repo = TransactionalMemoryRepository(snapshot)
+        val first = (repo.saveVisit(StarLogFixtures.createVisit(id = "ai-a", dedupeKey = "ai-a")) as Outcome.Ok).value
+        val second = (repo.saveVisit(StarLogFixtures.createVisit(id = "ai-b", dedupeKey = "ai-b")) as Outcome.Ok).value
+        val constellation = Constellation(
+            id = "constellation-ai",
+            kind = ConstellationKind.TRIP_ROUTE,
+            label = "AI score",
+            tripId = "trip-ai",
+            centerPoint = StarLogFixtures.SEOUL_CITY_HALL,
+            createdAtMs = 1_700_000_000_000L,
+            sourceMode = SourceMode.REPLAY,
+        )
+        assertTrue(
+            repo.saveConstellation(
+                constellation,
+                listOf(
+                    ConstellationMember(constellation.id, first.id, 0),
+                    ConstellationMember(constellation.id, second.id, 1),
+                ),
+            ) is Outcome.Ok,
+        )
+        val melody = MelodyGenerator().preview(
+            constellation.id,
+            listOf(MelodyStar(first.id, 0.0, 0.0, 0), MelodyStar(second.id, 1.0, 1.0, 1)),
+            0,
+        )
+        assertTrue(repo.saveBaseMelody(melody) is Outcome.Ok)
+        val request = AiMusicRequestFactory.create(
+            melody,
+            SourceMode.REPLAY,
+            ArrangementPreferences(
+                ArrangementGenre.AMBIENT,
+                ArrangementRhythm.STRAIGHT,
+                listOf(ArrangementInstrument.MUSIC_BOX),
+                88,
+            ),
+            createdAtMs = 1_700_000_100_000L,
+        )
+        val queued = AiMusicJob(
+            request = request,
+            provider = "mock-suno",
+            providerJobId = "provider-job-1",
+            status = AiMusicStatus.QUEUED,
+            updatedAtMs = 1_700_000_100_001L,
+        )
+        assertTrue(repo.saveAiMusicJob(queued) is Outcome.Ok)
+
+        val restarted = TransactionalMemoryRepository(snapshot)
+        assertEquals(queued, (restarted.loadAiMusicJob(request.requestId) as Outcome.Ok).value)
+        val completed = queued.copy(
+            status = AiMusicStatus.SUCCEEDED,
+            results = listOf(
+                AiMusicResult(
+                    id = "result-1",
+                    audioUrl = "/audio/result-1.wav",
+                    localFilePath = "generated/result-1.wav",
+                    mimeType = "audio/wav",
+                    durationMs = 4_000,
+                    model = "mock-melody-synth-v1",
+                    createdAtMs = 1_700_000_101_000L,
+                ),
+            ),
+            selectedResultId = "result-1",
+            updatedAtMs = 1_700_000_101_000L,
+        )
+        assertTrue(restarted.saveAiMusicJob(completed) is Outcome.Ok)
+        assertTrue(restarted.saveAiMusicJob(queued) is Outcome.Err)
+        assertTrue(restarted.saveBaseMelody(melody) is Outcome.Ok)
+        assertEquals(completed, (restarted.listAiMusicJobs(constellation.id) as Outcome.Ok).value.single())
         assertEquals(melody, (restarted.loadBaseMelody(constellation.id) as Outcome.Ok).value)
     }
 }

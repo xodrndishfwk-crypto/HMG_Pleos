@@ -18,6 +18,14 @@ import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
 import com.example.starlog2.starlog.melody.MelodyGenerator
 import com.example.starlog2.starlog.melody.MelodyStar
+import com.example.starlog2.starlog.melody.ArrangementGenre
+import com.example.starlog2.starlog.melody.ArrangementInstrument
+import com.example.starlog2.starlog.melody.ArrangementPreferences
+import com.example.starlog2.starlog.melody.ArrangementRhythm
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicRequestFactory
+import com.example.starlog2.starlog.music.AiMusicResult
+import com.example.starlog2.starlog.music.AiMusicStatus
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
 import com.example.starlog2.starlog.storage.StarLogDbSchema
 import com.example.starlog2.starlog.visit.VisitDetector
@@ -36,7 +44,7 @@ import com.example.starlog2.starlog.visit.VisitDetector
 object SqliteMemoryRepositoryAndroidTest {
 
     private const val TEST_DB_NAME = "starlog_memory_instrumented_test.db"
-    private const val MIGRATION_DB_NAME = "starlog_memory_v2_to_v3_test.db"
+    private const val MIGRATION_DB_NAME = "starlog_memory_v2_to_current_test.db"
 
     fun verifyAll(context: Context) {
         context.deleteDatabase(TEST_DB_NAME)
@@ -62,7 +70,7 @@ object SqliteMemoryRepositoryAndroidTest {
         } finally {
             context.deleteDatabase(TEST_DB_NAME)
         }
-        verifyV2ToV3MigrationPreservesRowsAndCreatesMelodyTable(context)
+        verifyV2ToCurrentMigrationPreservesRowsAndCreatesMusicTables(context)
     }
 
     private fun verifyDedupeKeyUpsertAndNullPreservation(repository: SqliteMemoryRepository) {
@@ -254,9 +262,10 @@ object SqliteMemoryRepositoryAndroidTest {
         return melody
     }
 
-    private fun verifyV2ToV3MigrationPreservesRowsAndCreatesMelodyTable(context: Context) {
+    private fun verifyV2ToCurrentMigrationPreservesRowsAndCreatesMusicTables(context: Context) {
         context.deleteDatabase(MIGRATION_DB_NAME)
         var migratedMelody: com.example.starlog2.starlog.melody.BaseMelody? = null
+        var migratedJob: AiMusicJob? = null
         try {
             context.openOrCreateDatabase(MIGRATION_DB_NAME, Context.MODE_PRIVATE, null).use { db ->
                 db.setForeignKeyConstraintsEnabled(true)
@@ -301,8 +310,8 @@ object SqliteMemoryRepositoryAndroidTest {
             }
 
             SqliteMemoryRepository(context, MIGRATION_DB_NAME).use { repository ->
-                check(repository.readableDatabase.version == StarLogDbSchema.DATABASE_VERSION_V3) {
-                    "Expected real v2 database to upgrade to v3"
+                check(repository.readableDatabase.version == StarLogDbSchema.CURRENT_DATABASE_VERSION) {
+                    "Expected real v2 database to upgrade to the current schema"
                 }
                 val visits = (repository.listVisits(SourceMode.LIVE) as Outcome.Ok).value
                 val stars = (repository.listStars(SourceMode.LIVE) as Outcome.Ok).value
@@ -314,6 +323,10 @@ object SqliteMemoryRepositoryAndroidTest {
                     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
                     arrayOf(StarLogDbSchema.TABLE_BASE_MELODIES),
                 ).use { cursor -> check(cursor.moveToFirst()) { "base_melodies table was not created" } }
+                repository.readableDatabase.rawQuery(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+                    arrayOf(StarLogDbSchema.TABLE_AI_MUSIC_JOBS),
+                ).use { cursor -> check(cursor.moveToFirst()) { "ai_music_jobs table was not created" } }
 
                 migratedMelody = MelodyGenerator().generate(
                     "legacy-constellation",
@@ -330,11 +343,49 @@ object SqliteMemoryRepositoryAndroidTest {
                     },
                 ).melody!!
                 check(repository.saveBaseMelody(migratedMelody!!) is Outcome.Ok)
+                val request = AiMusicRequestFactory.create(
+                    migratedMelody!!,
+                    SourceMode.LIVE,
+                    ArrangementPreferences(
+                        ArrangementGenre.AMBIENT,
+                        ArrangementRhythm.STRAIGHT,
+                        listOf(ArrangementInstrument.MUSIC_BOX),
+                        88,
+                    ),
+                    50_000L,
+                )
+                migratedJob = AiMusicJob(
+                    request = request,
+                    provider = "mock-suno-compatible",
+                    providerJobId = "migration-job",
+                    status = AiMusicStatus.SUCCEEDED,
+                    results = listOf(
+                        AiMusicResult(
+                            id = "migration-result",
+                            audioUrl = "/migration.wav",
+                            localFilePath = null,
+                            mimeType = "audio/wav",
+                            durationMs = 4_000L,
+                            model = "mock-melody-synth-v1",
+                            createdAtMs = 51_000L,
+                        ),
+                    ),
+                    selectedResultId = "migration-result",
+                    updatedAtMs = 51_000L,
+                )
+                check(repository.saveAiMusicJob(migratedJob!!) is Outcome.Ok)
+                check(repository.saveBaseMelody(migratedMelody!!) is Outcome.Ok)
+                check((repository.loadAiMusicJob(request.requestId) as Outcome.Ok).value == migratedJob) {
+                    "Re-saving the same confirmed melody deleted its AI music result"
+                }
             }
 
             SqliteMemoryRepository(context, MIGRATION_DB_NAME).use { reopened ->
                 check((reopened.loadBaseMelody("legacy-constellation") as Outcome.Ok).value == migratedMelody) {
                     "Migrated v2 database did not preserve the confirmed melody after reopen"
+                }
+                check((reopened.loadAiMusicJob(migratedJob!!.request.requestId) as Outcome.Ok).value == migratedJob) {
+                    "Migrated v2 database did not preserve the AI music job after reopen"
                 }
                 check((reopened.listVisits(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())
                 check((reopened.listStars(SourceMode.REPLAY) as Outcome.Ok).value.isEmpty())

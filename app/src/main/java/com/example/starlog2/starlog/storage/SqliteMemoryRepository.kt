@@ -16,6 +16,9 @@ import com.example.starlog2.starlog.model.ConstellationKind
 import com.example.starlog2.starlog.model.ConstellationMember
 import com.example.starlog2.starlog.model.StarLogErrorCodes
 import com.example.starlog2.starlog.melody.BaseMelody
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicJson
+import com.example.starlog2.starlog.music.AiMusicStatus
 import org.json.JSONObject
 
 /**
@@ -477,12 +480,17 @@ class SqliteMemoryRepository(
                 put("algorithm_version", melody.algorithmVersion)
                 put("payload_json", BaseMelodyJson.encode(melody))
             }
-            db.insertWithOnConflict(
-                StarLogDbSchema.TABLE_BASE_MELODIES,
-                null,
-                values,
-                SQLiteDatabase.CONFLICT_REPLACE,
-            ).also { if (it == -1L) throw IllegalStateException("Failed to save base melody") }
+            if (existingId == null) {
+                db.insertOrThrow(StarLogDbSchema.TABLE_BASE_MELODIES, null, values)
+            } else {
+                val updated = db.update(
+                    StarLogDbSchema.TABLE_BASE_MELODIES,
+                    values,
+                    "id = ?",
+                    arrayOf(melody.id),
+                )
+                if (updated != 1) throw IllegalStateException("Failed to update base melody")
+            }
             db.setTransactionSuccessful()
             Outcome.Ok(Unit)
         } catch (e: Exception) {
@@ -517,6 +525,93 @@ class SqliteMemoryRepository(
         Outcome.Ok(values)
     } catch (e: Exception) {
         Outcome.Err(storageError("storage.list_base_melodies_failed"))
+    }
+
+    override fun saveAiMusicJob(job: AiMusicJob): Outcome<Unit> {
+        val db = try { writableDatabase } catch (e: Exception) {
+            return Outcome.Err(storageError("storage.open_failed"))
+        }
+        db.beginTransaction()
+        return try {
+            var confirmedMelodyId: String? = null
+            db.query(
+                StarLogDbSchema.TABLE_BASE_MELODIES,
+                arrayOf("id"),
+                "constellation_id = ?",
+                arrayOf(job.request.constellationId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) confirmedMelodyId = cursor.getString(0) }
+            require(confirmedMelodyId == job.request.baseMelodyId) {
+                "AI music job must reference the confirmed base melody"
+            }
+
+            var existing: AiMusicJob? = null
+            db.query(
+                StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+                arrayOf("payload_json"),
+                "request_id = ?",
+                arrayOf(job.request.requestId),
+                null, null, null,
+            ).use { cursor -> if (cursor.moveToFirst()) existing = AiMusicJson.decodeJob(cursor.getString(0)) }
+            require(existing == null || existing?.request == job.request) {
+                "AI music request identity conflict: ${job.request.requestId}"
+            }
+            require(existing?.status != AiMusicStatus.SUCCEEDED || job.status == AiMusicStatus.SUCCEEDED) {
+                "A completed AI music job cannot regress"
+            }
+
+            val values = ContentValues().apply {
+                put("request_id", job.request.requestId)
+                put("provider_job_id", job.providerJobId)
+                put("constellation_id", job.request.constellationId)
+                put("source_mode", job.request.sourceMode.name)
+                put("base_melody_id", job.request.baseMelodyId)
+                put("status", job.status.name)
+                put("updated_at_ms", job.updatedAtMs)
+                put("payload_json", AiMusicJson.encodeJob(job))
+            }
+            db.insertWithOnConflict(
+                StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+                null,
+                values,
+                SQLiteDatabase.CONFLICT_REPLACE,
+            ).also { if (it == -1L) throw IllegalStateException("Failed to save AI music job") }
+            db.setTransactionSuccessful()
+            Outcome.Ok(Unit)
+        } catch (e: Exception) {
+            Outcome.Err(storageError("storage.save_ai_music_job_failed"))
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    override fun loadAiMusicJob(requestId: String): Outcome<AiMusicJob?> = try {
+        var value: AiMusicJob? = null
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+            arrayOf("payload_json"),
+            "request_id = ?",
+            arrayOf(requestId),
+            null, null, null,
+        ).use { cursor -> if (cursor.moveToFirst()) value = AiMusicJson.decodeJob(cursor.getString(0)) }
+        Outcome.Ok(value)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.load_ai_music_job_failed"))
+    }
+
+    override fun listAiMusicJobs(constellationId: String): Outcome<List<AiMusicJob>> = try {
+        val values = mutableListOf<AiMusicJob>()
+        readableDatabase.query(
+            StarLogDbSchema.TABLE_AI_MUSIC_JOBS,
+            arrayOf("payload_json"),
+            "constellation_id = ?",
+            arrayOf(constellationId),
+            null, null,
+            "updated_at_ms DESC, request_id ASC",
+        ).use { cursor -> while (cursor.moveToNext()) values += AiMusicJson.decodeJob(cursor.getString(0)) }
+        Outcome.Ok(values)
+    } catch (e: Exception) {
+        Outcome.Err(storageError("storage.list_ai_music_jobs_failed"))
     }
 
     private fun findVisitByDedupeKey(db: SQLiteDatabase, dedupeKey: String): Visit? {

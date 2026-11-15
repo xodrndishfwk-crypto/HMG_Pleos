@@ -1,5 +1,6 @@
 package com.example.starlog2
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.Gravity
@@ -20,7 +21,6 @@ import com.example.starlog2.starlog.melody.BaseMelody
 import com.example.starlog2.starlog.melody.ArrangementGenre
 import com.example.starlog2.starlog.melody.ArrangementInstrument
 import com.example.starlog2.starlog.melody.ArrangementPreferences
-import com.example.starlog2.starlog.melody.ArrangementPromptBuilder
 import com.example.starlog2.starlog.melody.ArrangementRhythm
 import com.example.starlog2.starlog.melody.MelodyCanvasView
 import com.example.starlog2.starlog.melody.MelodyConfig
@@ -30,25 +30,45 @@ import com.example.starlog2.starlog.melody.MelodyKey
 import com.example.starlog2.starlog.melody.MelodyPlaybackSession
 import com.example.starlog2.starlog.melody.MelodyPreviewPlayer
 import com.example.starlog2.starlog.melody.MelodyStar
+import com.example.starlog2.starlog.demo.MelodyDemoReplaySeeder
+import com.example.starlog2.starlog.gleo.GleoActionRequest
+import com.example.starlog2.starlog.gleo.GleoCallbackSender
+import com.example.starlog2.starlog.gleo.GleoContract
+import com.example.starlog2.starlog.music.AiMusicCoordinator
+import com.example.starlog2.starlog.music.AiMusicGatewayResult
+import com.example.starlog2.starlog.music.AiMusicJob
+import com.example.starlog2.starlog.music.AiMusicRequest
+import com.example.starlog2.starlog.music.AiMusicRequestFactory
+import com.example.starlog2.starlog.music.AiMusicStatus
+import com.example.starlog2.starlog.music.GeneratedSongPlayer
+import com.example.starlog2.starlog.music.HttpAiMusicGateway
 import com.example.starlog2.starlog.storage.SqliteMemoryRepository
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import org.json.JSONObject
+import org.json.JSONTokener
 
 class MelodyStudioActivity : AppCompatActivity() {
     private lateinit var canvas: MelodyCanvasView
     private lateinit var stateLabel: TextView
     private lateinit var angleLabel: TextView
+    private lateinit var constellationButton: Button
     private lateinit var angleSeek: SeekBar
     private lateinit var autoButton: Button
     private lateinit var playButton: Button
     private lateinit var confirmButton: Button
     private lateinit var arrangeButton: Button
+    private lateinit var aiPlayButton: Button
     private lateinit var octaveToggle: CheckBox
     private lateinit var chordToggle: CheckBox
     private lateinit var thresholdSeek: SeekBar
     private lateinit var keySpinner: Spinner
     private lateinit var resetButton: Button
     private lateinit var repository: SqliteMemoryRepository
+    private lateinit var musicGateway: HttpAiMusicGateway
+    private lateinit var musicCoordinator: AiMusicCoordinator
+    private lateinit var generatedSongPlayer: GeneratedSongPlayer
     private val io = Executors.newSingleThreadExecutor()
     private val player = MelodyPreviewPlayer()
     private val playback = MelodyPlaybackSession(
@@ -56,17 +76,56 @@ class MelodyStudioActivity : AppCompatActivity() {
         stopAction = player::close,
     )
     private var constellationId: String? = null
+    private var sourceMode: SourceMode? = null
+    private var requestedConstellationId: String? = null
+    private var requestedSourceMode: SourceMode? = null
     private var stars: List<MelodyStar> = emptyList()
     private var preview: BaseMelody? = null
     private var confirmed: BaseMelody? = null
+    private var aiMusicJob: AiMusicJob? = null
+    private var pendingGleoAction: GleoActionRequest? = null
     private var chordThresholdRatio: Double = 0.25
     private var selectedKey: MelodyKey = MelodyKey.C_MAJOR
-    private data class LoadedConstellation(val id: String, val stars: List<MelodyStar>, val confirmed: BaseMelody?)
+    private data class LoadedConstellation(
+        val id: String,
+        val sourceMode: SourceMode,
+        val stars: List<MelodyStar>,
+        val confirmed: BaseMelody?,
+        val aiMusicJob: AiMusicJob?,
+        val playableAiMusicJob: AiMusicJob?,
+    )
+    private data class ConstellationChoice(
+        val id: String,
+        val sourceMode: SourceMode,
+        val label: String,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supportActionBar?.hide()
+        pendingGleoAction = readGleoAction(intent)
+        requestedConstellationId = pendingGleoAction?.constellationId
+            ?: intent.getStringExtra(EXTRA_CONSTELLATION_ID)
+        requestedSourceMode = pendingGleoAction?.sourceMode ?: intent.getStringExtra(EXTRA_SOURCE_MODE)
+            ?.let { runCatching { SourceMode.valueOf(it) }.getOrNull() }
         repository = SqliteMemoryRepository(applicationContext)
+        musicGateway = HttpAiMusicGateway(
+            baseUrl = intent.getStringExtra(EXTRA_MUSIC_BACKEND_URL) ?: DEFAULT_MUSIC_BACKEND_URL,
+            sessionToken = intent.getStringExtra(EXTRA_MUSIC_BACKEND_TOKEN),
+        )
+        musicCoordinator = AiMusicCoordinator(repository, musicGateway)
+        generatedSongPlayer = GeneratedSongPlayer(applicationContext) { state ->
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    when (state) {
+                        GeneratedSongPlayer.State.PREPARING -> stateLabel.text = "AI 음악 재생 준비 중…"
+                        GeneratedSongPlayer.State.PLAYING -> stateLabel.text = "AI 음악 재생 중"
+                        GeneratedSongPlayer.State.STOPPED -> Unit
+                        GeneratedSongPlayer.State.ERROR -> stateLabel.text = "AI 음악 재생 실패"
+                    }
+                }
+            }
+        }
         setContentView(buildUi())
         loadLatestConstellation()
     }
@@ -104,6 +163,8 @@ class MelodyStudioActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(8), 0)
         }
+        constellationButton = actionButton("별자리 선택") { showConstellationSelection() }
+        controls.addView(constellationButton)
         angleLabel = TextView(this).apply {
             text = "회전 0°"
             setTextColor(Color.WHITE)
@@ -131,10 +192,14 @@ class MelodyStudioActivity : AppCompatActivity() {
         autoButton = actionButton("자동 회전") { optimize() }
         playButton = actionButton("♪ 미리 듣기") {
             val current = preview
-            if (current != null) playback.play(current)
+            if (current != null) {
+                generatedSongPlayer.close()
+                playback.activate()
+                playback.play(current)
+            }
         }
         confirmButton = actionButton("기본 멜로디 확정") { confirmCurrent() }
-        arrangeButton = actionButton("편곡 설정") { showArrangementDialog() }
+        arrangeButton = actionButton("AI 음악 만들기") { showArrangementDialog() }
         controls.addView(autoButton)
         controls.addView(playButton)
         controls.addView(confirmButton)
@@ -188,8 +253,11 @@ class MelodyStudioActivity : AppCompatActivity() {
             renderManual(0)
         }
         advanced.addView(resetButton)
+        aiPlayButton = actionButton("AI 곡 재생") { playGeneratedSong() }.apply { isEnabled = false }
+        advanced.addView(aiPlayButton)
         root.addView(advanced, LinearLayout.LayoutParams(-1, dp(52)))
         setControlsEnabled(false)
+        constellationButton.isEnabled = true
         return root
     }
 
@@ -215,9 +283,12 @@ class MelodyStudioActivity : AppCompatActivity() {
                 if (loaded == null) {
                     stateLabel.text = "별자리 없음"
                     canvas.render(emptyList(), null, "저장된 여행 별자리가 없습니다. 주행 후 별자리를 먼저 생성해 주세요.")
+                    finishPendingGleoWithoutConstellation()
                 } else {
                     constellationId = loaded.id
+                    sourceMode = loaded.sourceMode
                     stars = loaded.stars
+                    aiMusicJob = loaded.aiMusicJob
                     setControlsEnabled(true)
                     if (loaded.confirmed != null) {
                         confirmed = loaded.confirmed
@@ -227,29 +298,122 @@ class MelodyStudioActivity : AppCompatActivity() {
                         angleSeek.progress = loaded.confirmed.rotationAngleDeg
                         stateLabel.text = "확정 멜로디 복원 · ${loaded.confirmed.id.takeLast(8)}"
                         canvas.render(stars, loaded.confirmed)
+                        showRestoredAiMusicState(loaded.aiMusicJob)
+                        loaded.aiMusicJob?.let(::resumeAiMusicJobIfNeeded)
                     } else {
                         stateLabel.text = "${stars.size}개 별 · 준비됨"
                         renderManual(0)
                     }
+                    handlePendingGleoAction(loaded)
                 }
             }
         }
     }
 
     private fun loadInput(): LoadedConstellation? {
-        for (mode in listOf(SourceMode.LIVE, SourceMode.REPLAY)) {
+        val requestedId = requestedConstellationId
+        val modes = requestedSourceMode?.let(::listOf) ?: listOf(SourceMode.LIVE, SourceMode.REPLAY)
+        for (mode in modes) {
             val constellationResult = repository.listConstellations(mode)
             val starResult = repository.listStars(mode)
             val visitResult = repository.listVisits(mode)
             if (constellationResult !is Outcome.Ok || starResult !is Outcome.Ok || visitResult !is Outcome.Ok) continue
-            val pair = constellationResult.value.maxByOrNull { it.first.createdAtMs } ?: continue
+            val pair = if (requestedId == null) {
+                constellationResult.value.maxByOrNull { it.first.createdAtMs }
+            } else {
+                constellationResult.value.firstOrNull { it.first.id == requestedId }
+            } ?: continue
             val converted = MelodyInputProjector.project(pair.first, pair.second, starResult.value, visitResult.value)
             if (converted.size >= 2) {
                 val saved = (repository.loadBaseMelody(pair.first.id) as? Outcome.Ok)?.value
-                return LoadedConstellation(pair.first.id, converted, saved)
+                val jobs = (repository.listAiMusicJobs(pair.first.id) as? Outcome.Ok)?.value.orEmpty()
+                val playableJob = jobs.firstOrNull { job ->
+                    job.status == AiMusicStatus.SUCCEEDED &&
+                        job.selectedResult?.localFilePath?.let(::File)?.isFile == true
+                }
+                return LoadedConstellation(pair.first.id, mode, converted, saved, jobs.firstOrNull(), playableJob)
             }
         }
         return null
+    }
+
+    private fun showConstellationSelection() {
+        constellationButton.isEnabled = false
+        stateLabel.text = "별자리 목록 불러오는 중…"
+        io.execute {
+            val choices = buildList {
+                for (mode in listOf(SourceMode.LIVE, SourceMode.REPLAY)) {
+                    val values = (repository.listConstellations(mode) as? Outcome.Ok)?.value.orEmpty()
+                    values.sortedByDescending { it.first.createdAtMs }.forEach { (constellation, members) ->
+                        if (members.size >= 2) {
+                            add(
+                                ConstellationChoice(
+                                    id = constellation.id,
+                                    sourceMode = mode,
+                                    label = "${mode.name} · ${constellation.label ?: constellation.id} · ${members.size} stars",
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                constellationButton.isEnabled = true
+                if (choices.isEmpty()) {
+                    stateLabel.text = "선택할 별자리가 없습니다."
+                    AlertDialog.Builder(this)
+                        .setTitle("별자리 없음")
+                        .setMessage("실제 기록을 만든 뒤 다시 시도하거나, 명시적인 합성 REPLAY 데모를 생성할 수 있습니다.")
+                        .setNegativeButton("취소", null)
+                        .setPositiveButton("합성 REPLAY 생성") { _, _ -> seedDemoReplay() }
+                        .show()
+                    return@runOnUiThread
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("멜로디로 만들 별자리 선택")
+                    .setItems(choices.map { it.label }.toTypedArray()) { _, index ->
+                        val choice = choices[index]
+                        requestedConstellationId = choice.id
+                        requestedSourceMode = choice.sourceMode
+                        constellationId = null
+                        sourceMode = null
+                        stars = emptyList()
+                        preview = null
+                        confirmed = null
+                        aiMusicJob = null
+                        aiPlayButton.isEnabled = false
+                        setControlsEnabled(false)
+                        constellationButton.isEnabled = false
+                        stateLabel.text = "선택한 별자리 불러오는 중…"
+                        loadLatestConstellation()
+                    }
+                    .setNeutralButton("합성 REPLAY 생성") { _, _ -> seedDemoReplay() }
+                    .setNegativeButton("취소", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun seedDemoReplay() {
+        setControlsEnabled(false)
+        constellationButton.isEnabled = false
+        stateLabel.text = "합성 REPLAY 별자리 생성 중…"
+        io.execute {
+            val result = MelodyDemoReplaySeeder.seed(repository)
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (result is Outcome.Ok) {
+                    requestedConstellationId = result.value
+                    requestedSourceMode = SourceMode.REPLAY
+                    stateLabel.text = "합성 REPLAY 별자리 불러오는 중…"
+                    loadLatestConstellation()
+                } else {
+                    constellationButton.isEnabled = true
+                    stateLabel.text = "합성 REPLAY 생성 실패"
+                }
+            }
+        }
     }
 
     private fun config() = MelodyConfig(
@@ -313,7 +477,7 @@ class MelodyStudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun showArrangementDialog() {
+    private fun showArrangementDialog(preselectedGenre: ArrangementGenre? = null) {
         val melody = confirmed ?: run {
             stateLabel.text = "편곡 전에 기본 멜로디를 확정해 주세요."
             return
@@ -331,6 +495,7 @@ class MelodyStudioActivity : AppCompatActivity() {
             )
         }
         val genre = spinner(ArrangementGenre.entries.toTypedArray())
+        preselectedGenre?.let { genre.setSelection(ArrangementGenre.entries.indexOf(it)) }
         val rhythm = spinner(ArrangementRhythm.entries.toTypedArray())
         val instrument = spinner(ArrangementInstrument.entries.toTypedArray())
         val tempoLabel = TextView(this).apply {
@@ -361,8 +526,8 @@ class MelodyStudioActivity : AppCompatActivity() {
             .setTitle("확정 멜로디 편곡 설정")
             .setView(content)
             .setNegativeButton("취소", null)
-            .setPositiveButton("편곡 입력 만들기") { _, _ ->
-                val request = ArrangementPromptBuilder.build(
+            .setPositiveButton("AI 음악 생성") { _, _ ->
+                startAiMusicGeneration(
                     melody,
                     ArrangementPreferences(
                         genre = ArrangementGenre.entries[genre.selectedItemPosition],
@@ -371,17 +536,234 @@ class MelodyStudioActivity : AppCompatActivity() {
                         tempoBpm = 40 + tempo.progress,
                     ),
                 )
-                stateLabel.text = "외부 생성 서비스용 편곡 입력 준비됨"
-                AlertDialog.Builder(this)
-                    .setTitle("Provider-neutral arrangement prompt")
-                    .setMessage(request.prompt)
-                    .setPositiveButton("확인", null)
-                    .show()
             }
             .show()
     }
 
+    private fun startAiMusicGeneration(melody: BaseMelody, preferences: ArrangementPreferences) {
+        val mode = sourceMode ?: run {
+            stateLabel.text = "별자리 데이터 출처를 확인할 수 없습니다."
+            return
+        }
+        val request = AiMusicRequestFactory.create(melody, mode, preferences, System.currentTimeMillis())
+        arrangeButton.isEnabled = false
+        stateLabel.text = "AI 음악 요청 제출 중…"
+        runAiMusicRequest(request)
+    }
+
+    private fun resumeAiMusicJobIfNeeded(job: AiMusicJob) {
+        val hasPlayableFile = job.selectedResult?.localFilePath?.let(::File)?.isFile == true
+        if (job.status == AiMusicStatus.FAILED || hasPlayableFile) return
+        arrangeButton.isEnabled = false
+        stateLabel.text = "저장된 AI 음악 작업 이어받는 중…"
+        runAiMusicRequest(job.request)
+    }
+
+    private fun runAiMusicRequest(request: AiMusicRequest) {
+        io.execute {
+            var response = musicCoordinator.submitOrResume(request)
+            var polls = 0
+            while (response is AiMusicGatewayResult.Success &&
+                !response.value.status.isTerminal &&
+                polls < MAX_MUSIC_POLLS &&
+                !Thread.currentThread().isInterrupted
+            ) {
+                val snapshot = response.value
+                runOnUiThread { showAiMusicState(snapshot) }
+                try {
+                    Thread.sleep(MUSIC_POLL_INTERVAL_MS)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return@execute
+                }
+                response = musicCoordinator.refresh(snapshot)
+                polls += 1
+            }
+
+            if (response is AiMusicGatewayResult.Success && response.value.status == AiMusicStatus.SUCCEEDED) {
+                val completed = response.value
+                val selected = completed.selectedResult
+                if (selected != null && selected.localFilePath.isNullOrBlank()) {
+                    runOnUiThread { stateLabel.text = "AI 음악 저장 중…" }
+                    val extension = if (selected.mimeType == "audio/mpeg") "mp3" else "wav"
+                    val target = File(filesDir, "ai_music/${completed.request.requestId}/${selected.id}.$extension")
+                    response = when (val downloaded = musicGateway.download(selected, target)) {
+                        is AiMusicGatewayResult.Failure -> downloaded
+                        is AiMusicGatewayResult.Success ->
+                            musicCoordinator.saveDownloadedResult(completed, selected.id, downloaded.value.absolutePath)
+                    }
+                }
+            }
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                arrangeButton.isEnabled = confirmed != null
+                when (response) {
+                    is AiMusicGatewayResult.Failure -> {
+                        stateLabel.text = "AI 음악 요청 실패 · ${response.code.name}"
+                        aiPlayButton.isEnabled = false
+                    }
+                    is AiMusicGatewayResult.Success -> {
+                        aiMusicJob = response.value
+                        showAiMusicState(response.value)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showRestoredAiMusicState(job: AiMusicJob?) {
+        if (job == null) {
+            aiPlayButton.isEnabled = false
+            return
+        }
+        showAiMusicState(job)
+    }
+
+    private fun showAiMusicState(job: AiMusicJob) {
+        aiMusicJob = job
+        when (job.status) {
+            AiMusicStatus.SUBMITTING -> stateLabel.text = "AI 음악 요청 제출 중…"
+            AiMusicStatus.QUEUED -> stateLabel.text = "AI 음악 생성 대기 중"
+            AiMusicStatus.GENERATING -> stateLabel.text = "AI 음악 생성 중"
+            AiMusicStatus.DOWNLOADING -> stateLabel.text = "AI 음악 저장 중…"
+            AiMusicStatus.SUCCEEDED -> {
+                val playable = job.selectedResult?.localFilePath?.let(::File)?.isFile == true
+                aiPlayButton.isEnabled = playable
+                stateLabel.text = if (playable) "AI 음악 저장 완료 · 재생 가능" else "AI 음악 생성 완료 · 다운로드 필요"
+            }
+            AiMusicStatus.FAILED -> {
+                aiPlayButton.isEnabled = false
+                stateLabel.text = "AI 음악 생성 실패 · ${job.errorCode?.name ?: "UNKNOWN"}"
+            }
+        }
+    }
+
+    private fun playGeneratedSong() {
+        val file = aiMusicJob?.selectedResult?.localFilePath?.let(::File)
+        if (file?.isFile != true) {
+            stateLabel.text = "저장된 AI 음악 파일을 찾을 수 없습니다."
+            aiPlayButton.isEnabled = false
+            return
+        }
+        playback.deactivate()
+        generatedSongPlayer.play(file)
+    }
+
+    private fun readGleoAction(sourceIntent: Intent): GleoActionRequest? {
+        val functionName = sourceIntent.action
+            ?.takeIf { it in GleoContract.supportedActions }
+            ?: return null
+        val request = runCatching {
+            val raw = sourceIntent.getStringExtra(GleoContract.EXTRA_ACTION_PARAM) ?: "{}"
+            val decoded = JSONTokener(raw).nextValue()
+            val parameters = when (decoded) {
+                is JSONObject -> decoded
+                is String -> JSONObject(decoded)
+                else -> JSONObject()
+            }
+            GleoActionRequest.from(
+                functionName = functionName,
+                constellationId = parameters.optString("constellationId").takeIf { it.isNotBlank() },
+                sourceMode = parameters.optString("sourceMode").takeIf { it.isNotBlank() },
+                genre = parameters.optString("genre").takeIf { it.isNotBlank() },
+            )
+        }.getOrNull()
+        if (request == null) {
+            GleoCallbackSender.send(
+                context = this,
+                functionName = functionName,
+                status = GleoCallbackSender.Status.FAIL,
+                message = "The StarLog action parameters are invalid.",
+            )
+        }
+        return request
+    }
+
+    private fun finishPendingGleoWithoutConstellation() {
+        val request = pendingGleoAction ?: return
+        pendingGleoAction = null
+        GleoCallbackSender.send(
+            context = this,
+            functionName = request.functionName,
+            status = GleoCallbackSender.Status.ASKING,
+            message = "A recorded constellation must be selected before this action can continue.",
+        )
+    }
+
+    private fun handlePendingGleoAction(loaded: LoadedConstellation) {
+        val request = pendingGleoAction ?: return
+        pendingGleoAction = null
+        val commonData = mutableMapOf(
+            "constellationId" to loaded.id,
+            "sourceMode" to loaded.sourceMode.name,
+        ).apply {
+            loaded.confirmed?.let { put("baseMelodyId", it.id) }
+        }
+        when (request.functionName) {
+            GleoContract.ACTION_OPEN_MELODY_STUDIO -> GleoCallbackSender.send(
+                context = this,
+                functionName = request.functionName,
+                status = GleoCallbackSender.Status.SUCCESS,
+                message = "The constellation melody studio is open.",
+                data = listOf(commonData),
+            )
+
+            GleoContract.ACTION_PREPARE_CONSTELLATION_MUSIC -> {
+                if (loaded.confirmed == null) {
+                    stateLabel.text = "AI 음악 생성 전에 기본 멜로디를 확정해 주세요."
+                    GleoCallbackSender.send(
+                        context = this,
+                        functionName = request.functionName,
+                        status = GleoCallbackSender.Status.ASKING,
+                        message = "The base melody must be confirmed before arranging generated music.",
+                        data = listOf(commonData),
+                    )
+                } else {
+                    GleoCallbackSender.send(
+                        context = this,
+                        functionName = request.functionName,
+                        status = GleoCallbackSender.Status.ASKING,
+                        message = "Review the arrangement settings and confirm the generation request on screen.",
+                        data = listOf(commonData),
+                    )
+                    showArrangementDialog(request.genre)
+                }
+            }
+
+            GleoContract.ACTION_PLAY_CONSTELLATION_MUSIC -> {
+                val job = loaded.playableAiMusicJob
+                val selectedResult = job?.selectedResult
+                val file = selectedResult?.localFilePath?.let(::File)
+                if (job != null && selectedResult != null && file?.isFile == true) {
+                    aiMusicJob = job
+                    playback.deactivate()
+                    generatedSongPlayer.play(file)
+                    commonData["jobId"] = job.providerJobId ?: job.request.requestId
+                    commonData["resultId"] = selectedResult.id
+                    GleoCallbackSender.send(
+                        context = this,
+                        functionName = request.functionName,
+                        status = GleoCallbackSender.Status.SUCCESS,
+                        message = "The saved constellation song is now playing.",
+                        data = listOf(commonData),
+                        mode = GleoCallbackSender.Mode.SILENT,
+                    )
+                } else {
+                    GleoCallbackSender.send(
+                        context = this,
+                        functionName = request.functionName,
+                        status = GleoCallbackSender.Status.FAIL,
+                        message = "No playable generated song is saved for the selected constellation.",
+                        data = listOf(commonData),
+                    )
+                }
+            }
+        }
+    }
+
     private fun setControlsEnabled(enabled: Boolean) {
+        constellationButton.isEnabled = true
         angleSeek.isEnabled = enabled
         autoButton.isEnabled = enabled
         playButton.isEnabled = enabled
@@ -392,6 +774,7 @@ class MelodyStudioActivity : AppCompatActivity() {
         thresholdSeek.isEnabled = enabled
         keySpinner.isEnabled = enabled
         resetButton.isEnabled = enabled
+        aiPlayButton.isEnabled = enabled && aiMusicJob?.selectedResult?.localFilePath?.let(::File)?.isFile == true
     }
 
     override fun onResume() {
@@ -400,11 +783,13 @@ class MelodyStudioActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        generatedSongPlayer.close()
         playback.deactivate()
         super.onPause()
     }
 
     override fun onDestroy() {
+        generatedSongPlayer.close()
         playback.close()
         io.shutdownNow()
         closeRepositoryAfterIoStops()
@@ -428,5 +813,14 @@ class MelodyStudioActivity : AppCompatActivity() {
         }
     }
 
-    private companion object { val GOLD = Color.rgb(229, 200, 136) }
+    companion object {
+        const val EXTRA_CONSTELLATION_ID = "starlog.constellationId"
+        const val EXTRA_SOURCE_MODE = "starlog.sourceMode"
+        const val EXTRA_MUSIC_BACKEND_URL = "starlog.musicBackendUrl"
+        const val EXTRA_MUSIC_BACKEND_TOKEN = "starlog.musicBackendToken"
+        const val DEFAULT_MUSIC_BACKEND_URL = "http://10.0.2.2:8787"
+        private const val MAX_MUSIC_POLLS = 40
+        private const val MUSIC_POLL_INTERVAL_MS = 1_500L
+        val GOLD = Color.rgb(229, 200, 136)
+    }
 }

@@ -3,6 +3,7 @@ package com.example.starlog2.starlog.journey
 import com.example.starlog2.contracts.AppError
 import com.example.starlog2.contracts.Outcome
 import com.example.starlog2.contracts.SourceMode
+import com.example.starlog2.starlog.demo.DemoRoute
 import com.example.starlog2.starlog.demo.SubmissionDemoJourney
 import com.example.starlog2.starlog.model.StarLogErrorCodes
 import com.example.starlog2.starlog.storage.StarLogMemoryRepository
@@ -48,8 +49,13 @@ class JourneyController(
     private val repository: StarLogMemoryRepository,
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val tripIdFactory: (Long) -> String = { now -> "submission-$now-${UUID.randomUUID()}" },
+    /** Route used for newly started journeys. Existing journeys keep the route encoded in their trip id. */
+    val route: DemoRoute = DemoRoute.GUMI_BUSAN,
 ) {
     private var inputEnabled = false
+
+    /** Route of a stored journey; legacy ids without a route slug use this controller's route. */
+    fun routeOf(record: JourneyRecord): DemoRoute = DemoRoute.forTrip(record.id, route)
 
     @Synchronized
     fun control(operation: JourneyControlOperation, sourceMode: SourceMode = SourceMode.REPLAY): JourneyControlResponse =
@@ -75,7 +81,7 @@ class JourneyController(
         }
         val startedAt = nowMs()
         val tripId = tripIdFactory(startedAt)
-        val journey = SubmissionDemoJourney(repository, tripId, sourceMode)
+        val journey = SubmissionDemoJourney(repository, tripId, sourceMode, DemoRoute.forTrip(tripId, route))
         return when (val result = journey.start(startedAt)) {
             is Outcome.Ok -> {
                 inputEnabled = true
@@ -94,7 +100,7 @@ class JourneyController(
         if (!inputEnabled) return Outcome.Err(error(StarLogErrorCodes.INVALID_STATE, "journey.input_stopped"))
         val active = current(sourceMode)?.takeIf { it.status == JourneyStatus.ACTIVE }
             ?: return Outcome.Err(error(StarLogErrorCodes.INVALID_STATE, "journey.not_active"))
-        return SubmissionDemoJourney(repository, active.id, sourceMode).advance()
+        return SubmissionDemoJourney(repository, active.id, sourceMode, routeOf(active)).advance()
     }
 
     @Synchronized
@@ -107,14 +113,15 @@ class JourneyController(
                 null,
             )
         if (current.status == JourneyStatus.COMPLETED) return completed(current)
-        if (current.points.size < SubmissionDemoJourney.STOPS.size) {
+        val currentRoute = routeOf(current)
+        if (current.points.size < currentRoute.stops.size) {
             return JourneyControlResponse.Asking(
                 snapshot(current),
                 "The journey has recorded ${current.points.size} points. Continue recording before ending it.",
                 current,
             )
         }
-        return when (val result = SubmissionDemoJourney(repository, current.id, sourceMode).complete(nowMs())) {
+        return when (val result = SubmissionDemoJourney(repository, current.id, sourceMode, currentRoute).complete(nowMs())) {
             is Outcome.Ok -> completed(result.value)
             is Outcome.Err -> failure(sourceMode, "The journey could not be completed and its constellation was not finalized.", result.error.code, result.error)
         }

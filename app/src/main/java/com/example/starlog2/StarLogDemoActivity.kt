@@ -222,7 +222,7 @@ class StarLogDemoActivity : AppCompatActivity() {
     private fun scheduleNext() {
         if (!running) return
         val current = controller.current()
-        if (current == null || current.points.size >= SubmissionDemoJourney.STOPS.size) {
+        if (current == null || current.points.size >= stopCount()) {
             running = false
             render(current)
             return
@@ -253,7 +253,7 @@ class StarLogDemoActivity : AppCompatActivity() {
                 when (result) {
                     is JourneyControlResponse.Success -> render(result.record)
                     is JourneyControlResponse.Asking -> {
-                        finishButton.isEnabled = result.snapshot.recordedPointCount == SubmissionDemoJourney.STOPS.size
+                        finishButton.isEnabled = result.snapshot.recordedPointCount == stopCount()
                         state.text = result.message
                     }
                     is JourneyControlResponse.Failure -> {
@@ -268,11 +268,11 @@ class StarLogDemoActivity : AppCompatActivity() {
     private fun render(record: JourneyRecord?) {
         displayedRecord = record
         if (record == null) {
-            progress.text = "기록 0 / ${SubmissionDemoJourney.STOPS.size}"
+            progress.text = "기록 0 / ${stopCount()}"
             constellation.render(null)
             return
         }
-        progress.text = "기록 ${record.points.size} / ${SubmissionDemoJourney.STOPS.size} · ${record.points.lastOrNull()?.label ?: "READY"}"
+        progress.text = "기록 ${record.points.size} / ${stopCount()} · ${record.points.lastOrNull()?.label ?: "READY"}"
         constellation.render(record)
         when {
             record.status == JourneyStatus.COMPLETED -> {
@@ -283,7 +283,7 @@ class StarLogDemoActivity : AppCompatActivity() {
                 melodyButton.isEnabled = true
                 memoryButton.isEnabled = true
             }
-            record.points.size == SubmissionDemoJourney.STOPS.size -> {
+            record.points.size == stopCount() -> {
                 state.text = "9개 지점 기록 완료 · 명시적 종료를 눌러 주세요"
                 journeyButton.isEnabled = false
                 finishButton.isEnabled = true
@@ -296,6 +296,9 @@ class StarLogDemoActivity : AppCompatActivity() {
             }
         }
     }
+
+    private fun stopCount(): Int = (displayedRecord ?: controller.current())?.let(controller::routeOf)?.stops?.size
+        ?: controller.route.stops.size
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)

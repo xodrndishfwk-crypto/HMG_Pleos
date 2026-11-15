@@ -17,9 +17,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Starlog2">
+        <!-- Storyboard UI: launcher and the single receiver of the three public Gleo actions. -->
         <activity
-            android:name=".StarLogDemoActivity"
+            android:name=".StarLogExperienceActivity"
             android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|keyboard|keyboardHidden|navigation|locale|layoutDirection"
             android:launchMode="singleTop"
             android:screenOrientation="landscape">
             <intent-filter>
@@ -28,9 +30,16 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="CONTROL_STARLOG_JOURNEY" />
+                <action android:name="PREPARE_CONSTELLATION_MUSIC" />
+                <action android:name="PLAY_CONSTELLATION_MUSIC" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- Previous plain submission screen, kept reachable only inside the app. -->
+        <activity
+            android:name=".StarLogDemoActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
         <activity android:name=".GlNavigationActivity" android:exported="false" />
         <activity
             android:name=".StarMemoryActivity"
@@ -44,8 +53,6 @@
             android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="OPEN_MELODY_STUDIO" />
-                <action android:name="PREPARE_CONSTELLATION_MUSIC" />
-                <action android:name="PLAY_CONSTELLATION_MUSIC" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>StarLog</title>
+  <link rel="stylesheet" href="../maplibre-gl.css" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div id="stage">
+
+  <!-- 00A · intro (design SVG) -->
+  <section id="s-intro" class="screen full">
+    <img class="design" src="img/intro.svg" alt="" />
+    <div class="intro-glow"></div>
+    <div class="loading-bar"><i></i></div>
+  </section>
+
+  <!-- 00B · Korea star atlas (design SVG) -->
+  <section id="s-atlas" class="screen full">
+    <img class="design" src="img/atlas.svg" alt="" />
+    <button class="atlas-cta" id="atlasStart">▶ 여정 시작</button>
+    <div class="atlas-note">
+      <div class="t1" id="atlasT1">DEMO REPLAY · 대구 출발 → 문경 새재</div>
+      <div class="t2" id="atlasT2">시연용 재생 데이터로 7개 경유 별을 기록합니다</div>
+    </div>
+  </section>
+
+  <!-- 01 · drive D -->
+  <section id="s-drive" class="screen">
+    <div class="frame">
+      <div id="map"><div class="grid3d"></div></div>
+      <div class="beam"></div>
+      <img class="car" src="img/car.png" alt="" />
+      <div class="sky">
+        <svg id="skySvg" viewBox="0 0 1644 250" preserveAspectRatio="none"></svg>
+        <div class="ticks" id="skyTicks"></div>
+      </div>
+      <div class="horizon"></div>
+      <div class="demo-tag">DEMO REPLAY · 시연 재생 데이터</div>
+      <div class="arrive" id="arrive">
+        <div class="t1">7개의 별을 모두 기록했습니다</div>
+        <div class="t2">자동 완료되지 않습니다 · 여정을 직접 종료하면 별자리가 만들어집니다</div>
+        <button id="arriveEnd">여정 종료 · 별자리 만들기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 · parked P memory aperture -->
+  <section id="s-memory" class="screen">
+    <div class="frame">
+      <svg id="memSky" viewBox="0 0 1644 960" style="position:absolute;inset:0;width:100%;height:100%"></svg>
+      <div class="mem-caption" id="memCaption"></div>
+      <div id="memSats"></div>
+      <div class="aperture">
+        <div class="ring"></div><div class="ring2"></div>
+        <div class="photo" id="memPhoto"><div class="count" id="memCount"></div></div>
+      </div>
+      <div class="mem-title"><div class="t1" id="memTitle"></div><div class="t2" id="memSub"></div></div>
+      <div class="mem-nav">
+        <button id="memPrev">◁ 이전 별자리</button>
+        <button class="cur" id="memCur"></button>
+        <button id="memNext">다음 별자리 ▷</button>
+      </div>
+      <div class="mem-stars" id="memStars"></div>
+    </div>
+  </section>
+
+  <!-- 03a · constellation forging -->
+  <section id="s-forge" class="screen">
+    <div class="frame">
+      <div class="headline"><div class="cap">CONSTELLATION FORGING · 출발 → 경유 → 도착</div><h1 id="forgeTitle">오늘의 별자리 작성</h1></div>
+      <div class="badge"><i></i><span id="forgeBadge">경유 노드 0 / 7</span></div>
+      <svg id="forgeSky" viewBox="0 0 1268 420"></svg>
+      <div class="timeline">
+        <div class="cap">TRIP ROUTE → CONSTELLATION TIMELINE</div>
+        <div class="cap2">출발지 → 경유지 → 도착지 연결</div>
+        <div class="track"><div class="fill" id="tlFill"></div><div id="tlNodes"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03b · music box score -->
+  <section id="s-score" class="screen">
+    <div class="frame">
+      <div class="headline"><div class="cap" id="scoreCap">TODAY TRIP CONSTELLATION · P</div><h1 id="scoreTitle">오늘의 별자리</h1></div>
+      <div class="match" id="match"><div class="cap" id="matchCap">SIMILARITY MATCH</div><div class="v" id="matchV"></div><div class="grade" id="matchG">S</div></div>
+      <div class="playtag" id="playtag" style="display:none"></div>
+      <svg id="scoreSky" viewBox="0 0 1268 470"></svg>
+      <div class="card" id="card">
+        <div class="disc"><i></i></div>
+        <div class="meta">
+          <div class="cap" id="cardCap">MUNGYEONG MELODY · DEMO MOCK</div>
+          <h2 id="cardTitle">여정 멜로디</h2>
+          <p id="cardSub"></p>
+          <p class="blue">별자리 이름은 위치 정보 기반으로 자동 생성됩니다</p>
+        </div>
+        <div class="wave"><div class="cap" id="waveCap"></div><div class="bars" id="bars"></div></div>
+        <div class="acts" id="acts"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- shared chrome (hidden on full design screens) -->
+  <div class="chrome" id="chrome" style="display:none">
+    <div class="brand"><b>✦ StarLog</b><span id="brandSub">3D CELESTIAL NAVIGATION</span><em id="brandTag">DEMO REPLAY</em></div>
+    <div class="tabs">
+      <button data-tab="drive">주행 D · 별자리 내비</button>
+      <button data-tab="memory">정차 P · 기억의 창</button>
+      <button data-tab="end">여정 종료 · 오르골 악보</button>
+    </div>
+    <div class="ambient"><i></i>Ambient Sync · Gold #E5C888</div>
+    <div class="bar">
+      <div class="left"><div class="compass" id="barCompass">▲</div><div><div class="cap" id="barCap"></div><div class="val" id="barVal"></div></div></div>
+      <div class="mid"><div class="pill" id="barPill"></div><div><div class="t1" id="barT1"></div><div class="t2" id="barT2"></div></div></div>
+      <div class="right"><div class="g" id="barG"></div><div class="t2" id="barR2" style="font-size:12px;color:var(--sub);margin-top:6px"></div></div>
+    </div>
+  </div>
+
+  <div class="sheet" id="sheet">
+    <div class="box">
+      <h3>확정 멜로디 편곡 설정</h3>
+      <div class="note">확정한 기본 멜로디로만 생성합니다 · 음원은 DEMO MOCK 서버에서 만들어집니다</div>
+      <div class="row"><div class="lab">장르</div><div class="chips" data-key="genre"></div></div>
+      <div class="row"><div class="lab">리듬</div><div class="chips" data-key="rhythm"></div></div>
+      <div class="row"><div class="lab">악기</div><div class="chips" data-key="instrument"></div></div>
+      <div class="row"><div class="lab" id="tempoLab">TEMPO 88 BPM</div><input type="range" id="tempo" min="40" max="140" value="88" /></div>
+      <div class="foot"><button id="sheetCancel">취소</button><button class="primary" id="sheetGo">AI 음악 생성 · DEMO MOCK</button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+<script src="../maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

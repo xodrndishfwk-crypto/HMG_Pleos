@@ -28,7 +28,9 @@ class SubmissionDemoJourney(
     private val repository: StarLogMemoryRepository,
     val tripId: String = TRIP_ID,
     val sourceMode: SourceMode = SourceMode.REPLAY,
+    val route: DemoRoute = DemoRoute.GUMI_BUSAN,
 ) {
+    private val stops: List<DemoStop> get() = route.stops
     val constellationId: String = "constellation-trip-$tripId"
     data class DemoStop(val label: String, val point: LatLon, val leg: JourneyLeg)
 
@@ -54,11 +56,11 @@ class SubmissionDemoJourney(
 
     fun advance(): Outcome<JourneyRecord> {
         val current = current() ?: return invalidState("demo journey has not started")
-        if (current.status == JourneyStatus.COMPLETED || current.points.size >= STOPS.size) {
+        if (current.status == JourneyStatus.COMPLETED || current.points.size >= stops.size) {
             return invalidState("demo journey has no remaining point")
         }
         val order = current.points.size
-        val stop = STOPS[order]
+        val stop = stops[order]
         val detector = VisitDetector(defaultTripId = tripId)
         val logicalStart = current.startedAtMs + order * STOP_STRIDE_MS
         val monotonicStart = order * STOP_STRIDE_MS
@@ -115,15 +117,15 @@ class SubmissionDemoJourney(
     fun complete(completedAtMs: Long? = null): Outcome<JourneyRecord> {
         val current = current() ?: return invalidState("demo journey has not started")
         if (current.status == JourneyStatus.COMPLETED) return Outcome.Ok(current)
-        if (current.points.size != STOPS.size) {
-            return invalidState("demo journey cannot finish before all ${STOPS.size} points")
+        if (current.points.size != stops.size) {
+            return invalidState("demo journey cannot finish before all ${stops.size} points")
         }
         val effectiveCompletedAtMs = maxOf(completedAtMs ?: 0L, current.points.last().visitedAtMs)
         val unique = current.points.filter { it.createsNewStar }
         val constellation = Constellation(
             id = current.constellationId,
             kind = ConstellationKind.TRIP_ROUTE,
-            label = "구미-부산 왕복 시연",
+            label = route.constellationLabel,
             tripId = current.id,
             centerPoint = LatLon(unique.map { it.point.lat }.average(), unique.map { it.point.lon }.average()),
             createdAtMs = effectiveCompletedAtMs,
@@ -138,15 +140,20 @@ class SubmissionDemoJourney(
         }
 
         val outbound = current.points.filter { it.leg == JourneyLeg.OUTBOUND }
-        val edges = outbound.zipWithNext().mapIndexed { index, (from, to) ->
+        val outboundEdges = outbound.zipWithNext().mapIndexed { index, (from, to) ->
             StoredConstellationEdge(current.constellationId, index, from.starId, to.starId, ConstellationEdgeKind.OUTBOUND)
-        } + StoredConstellationEdge(
-            constellationId = current.constellationId,
-            orderIndex = outbound.size - 1,
-            fromStarId = outbound.last().starId,
-            toStarId = current.points.single { it.leg == JourneyLeg.RETURN_NEW }.starId,
-            kind = ConstellationEdgeKind.BRANCH,
-        )
+        }
+        // Routes without a new return branch (e.g. one-way Mungyeong) simply have no BRANCH edge.
+        val branch = current.points.singleOrNull { it.leg == JourneyLeg.RETURN_NEW }?.let { returnNew ->
+            StoredConstellationEdge(
+                constellationId = current.constellationId,
+                orderIndex = outbound.size - 1,
+                fromStarId = outbound.last().starId,
+                toStarId = returnNew.starId,
+                kind = ConstellationEdgeKind.BRANCH,
+            )
+        }
+        val edges = outboundEdges + listOfNotNull(branch)
         val completed = current.copy(
             status = JourneyStatus.COMPLETED,
             completedAtMs = effectiveCompletedAtMs,
@@ -183,16 +190,7 @@ class SubmissionDemoJourney(
         const val STOP_STRIDE_MS = 900_000L
         const val DEFAULT_START_AT_MS = 1_800_000_000_000L
 
-        val STOPS = listOf(
-            DemoStop("구미", LatLon(36.1195, 128.3446), JourneyLeg.OUTBOUND),
-            DemoStop("대구", LatLon(35.8714, 128.6014), JourneyLeg.OUTBOUND),
-            DemoStop("경주", LatLon(35.8562, 129.2247), JourneyLeg.OUTBOUND),
-            DemoStop("울산", LatLon(35.5384, 129.3114), JourneyLeg.OUTBOUND),
-            DemoStop("부산", LatLon(35.1796, 129.0756), JourneyLeg.OUTBOUND),
-            DemoStop("울산", LatLon(35.5384, 129.3114), JourneyLeg.RETURN),
-            DemoStop("경주", LatLon(35.8562, 129.2247), JourneyLeg.RETURN),
-            DemoStop("김해", LatLon(35.2285, 128.8894), JourneyLeg.RETURN_NEW),
-            DemoStop("구미", LatLon(36.1195, 128.3446), JourneyLeg.RETURN),
-        )
+        /** Stops of the default Gumi → Busan route, kept for existing callers and tests. */
+        val STOPS: List<DemoStop> get() = DemoRoute.GUMI_BUSAN.stops
     }
 }

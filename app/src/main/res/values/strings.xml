@@ -1,3 +1,16 @@
 <resources>
+    <string name="memory_operation_failed">기억 작업을 처리하지 못했습니다.</string>
+    <string name="replay_start">모의 주행 시작</string>
+    <string name="navigation_failed">경로를 불러오지 못했습니다.</string>
+    <string name="navigation_replay_status">76° 3D 주행 · %1$s</string>
+    <string name="replay_ready">경로 준비 완료 · 모의 주행을 시작하세요.</string>
+    <string name="maneuver_distance">%1$d m</string>
     <string name="app_name">starlog2</string>
+    <string name="door_diagnostic_title">Pleos Connect 도어 상태</string>
+    <string name="map_ready">76° WebGL 지도 준비 완료</string>
+    <string name="map_loading">WebGL 지도 초기화 중…</string>
+    <string name="vehicle_diagnostic_button">차량 SDK 진단</string>
+    <string name="route_loading">Valhalla 경로 요청 중…</string>
+    <string name="render_too_large">표시할 경로 데이터가 너무 큽니다.</string>
+    <string name="prototype_maneuver">↱  530m</string>
 </resources>

@@ -1,5 +1,11 @@
 # StarLog 팀 작업 안내
+
+[확실] 2026-11-13 목적지 선택 준비 코드 PR #18을 수락했다. HIGH 연결 API와 디자인 노드의 다음 작업, 실제 검색 서비스 미정 상태는 [목적지 선택 검토·인수인계](team/NAVIGATION_DESTINATION_VALIDATION.md)를 확인한다. 실제 검색 화면 완료와 구분한다.
+
+[확실] 최신 상태(2026-11-11): 내비 N2/I1 및 StarLog S2-G1-r2 PR13/I2 PR16은 integration에 통합·검증했다. **[최신 S2/I2 결과·다음 행동](team/STARLOG_R2_I2_VALIDATION.md)**과 담당 Issue의 최신 댓글을 확인한다. 실제 차량 센서·실차 V1·전체서비스 완료와 구분한다. 아래 단계표는 전체 계획이며 모두 완료됐다는 뜻은 아니다.
 [확실] 고사양 PC 1대와 노트북 2대로 함께 개발한다.
+
+[확실] 2026-11-10 G1 공통 기반이 준비되었다. **[integration 브랜치의 승인 기준](https://github.com/xodrndishfwk-crypto/HMG_Pleos/blob/integration/starlog-v1/docs/team/BASELINE.md)**과 [검증 결과](https://github.com/xodrndishfwk-crypto/HMG_Pleos/blob/integration/starlog-v1/docs/g1/VALIDATION.md)를 먼저 확인한다. 시작 코드는 approved SHA, 실제 공지는 [Issue #2](https://github.com/xodrndishfwk-crypto/HMG_Pleos/issues/2)의 H-G1-20261110-01이다. 노트북은 본인 Issue에 BASELINE_ACK를 남긴 뒤 진행한다. 내비 v2 수락·화면 연결 완료를 뜻하지 않는다.
 
 ## 전체 완성까지의 순서
 [추정] 아래는 앞으로 따라갈 개발 순서다. 완료 표시가 아니라 실행 계획이다.

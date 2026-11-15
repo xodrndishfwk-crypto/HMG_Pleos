@@ -1,5 +1,6 @@
 package com.example.starlog2.navigation
 
+import com.example.starlog2.contracts.Outcome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -37,5 +38,15 @@ class Polyline6Test {
         val result = Polyline6.decode("??AAAA", maxPoints = 2)
 
         assertTrue(result is Outcome.Err)
+    }
+
+    @Test
+    fun decode_highBitOverflow_returnsInvalidResponse() {
+        val overflowingLatitude = "____________O"
+
+        val result = Polyline6.decode(overflowingLatitude + "???")
+
+        assertTrue(result is Outcome.Err)
+        assertEquals("INVALID_RESPONSE", (result as Outcome.Err).error.code)
     }
 }

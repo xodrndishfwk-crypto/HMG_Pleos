@@ -2,7 +2,7 @@ package com.example.starlog2
 
 import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
+import timber.log.Timber
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(Color.WHITE)
 
             addView(TextView(context).apply {
-                text = "Pleos Connect 도어 상태"
+                setText(R.string.door_diagnostic_title)
                 textSize = 28f
                 setTextColor(Color.BLACK)
                 gravity = Gravity.CENTER
@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
             readDoorPosition()
         } catch (error: Exception) {
             initialized = false
-            Log.e(TAG, "Vehicle 초기화 실패", error)
+            Timber.tag(TAG).e(error, "Vehicle 초기화 실패")
             showError("초기화 오류", error)
         }
     }
@@ -99,14 +99,14 @@ class MainActivity : AppCompatActivity() {
                     }
                 },
                 onFailed = { error: Exception ->
-                    Log.e(TAG, "도어 위치 조회 실패", error)
+                    Timber.tag(TAG).e(error, "도어 위치 조회 실패")
                     runOnUiThread {
                         if (!destroyed) showError("조회 오류", error)
                     }
                 },
             )
         } catch (error: Exception) {
-            Log.e(TAG, "도어 위치 조회 호출 실패", error)
+            Timber.tag(TAG).e(error, "도어 위치 조회 호출 실패")
             showError("조회 호출 오류", error)
         }
     }
@@ -132,7 +132,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 currentVehicle.release()
             } catch (error: Exception) {
-                Log.e(TAG, "Vehicle 해제 실패", error)
+                Timber.tag(TAG).e(error, "Vehicle 해제 실패")
             }
         }
         super.onDestroy()

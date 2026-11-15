@@ -61,14 +61,44 @@ class MelodyGeneratorTest {
         val config = MelodyConfig(chordThresholdRatio = 0.15)
         val stars = listOf(
             MelodyStar("a", 0.0, 0.00, 0),
-            MelodyStar("b", 1.0, 0.02, 1),
-            MelodyStar("c", 2.0, 0.04, 2),
+            MelodyStar("b", 1.0, 0.01, 1),
+            MelodyStar("c", 2.0, 0.02, 2),
             MelodyStar("outlier", 3.0, 1.00, 3),
         )
         val melody = MelodyGenerator(config).preview("c", stars, 0)
         assertEquals(1, melody.chords.size)
         assertEquals(listOf("a", "b"), melody.chords.single().starIds)
         assertTrue(melody.notes.first { it.starId == "c" }.chordGroupId == null)
+    }
+
+    @Test
+    fun chordGrouping_includesExactBoundaryAndSameHeight_excludesAboveBoundaryAndHonorsOff() {
+        val boundaryStars = listOf(
+            MelodyStar("a", 0.0, 0.00, 0),
+            MelodyStar("b", 1.0, 0.01, 1),
+            MelodyStar("outlier", 2.0, 1.00, 2),
+        )
+        // Default C-major mapping has 28 intervals. A 0.01/1.00 Y gap normalizes to
+        // 0.01 * 28 * (staffSpacing / 2) = 6.72, exactly 14% of staffSpacing.
+        val exactBoundary = MelodyGenerator(MelodyConfig(chordThresholdRatio = 0.14))
+            .preview("boundary", boundaryStars, 0)
+        assertEquals(listOf("a", "b"), exactBoundary.chords.single().starIds)
+
+        val aboveBoundary = MelodyGenerator(MelodyConfig(chordThresholdRatio = 0.139))
+            .preview("above", boundaryStars, 0)
+        assertTrue(aboveBoundary.chords.isEmpty())
+
+        val sameHeightStars = boundaryStars.toMutableList().apply {
+            this[1] = this[1].copy(originalY = 0.0)
+        }
+        val sameHeight = MelodyGenerator(MelodyConfig(chordThresholdRatio = 0.0))
+            .preview("same-height", sameHeightStars, 0)
+        assertEquals(listOf("a", "b"), sameHeight.chords.single().starIds)
+
+        val disabled = MelodyGenerator(
+            MelodyConfig(chordThresholdRatio = 1.0, chordGenerationEnabled = false),
+        ).preview("disabled", sameHeightStars, 0)
+        assertTrue(disabled.chords.isEmpty())
     }
 
     @Test

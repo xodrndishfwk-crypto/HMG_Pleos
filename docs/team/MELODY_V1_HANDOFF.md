@@ -3,7 +3,131 @@
 최초 작성일: 2026-11-14 KST
 게시 복구 갱신일: 2026-11-15 KST
 수정 재인수 갱신일: 2026-11-15 KST
-상태: `HANDOFF_READY` revision 3 — M1/M2 수정 및 SQLite 시험 보완, Android SDK 환경 재검증 대기, integration 미통합
+화음 시험 재인수 갱신일: 2026-11-15 KST
+상태: `HANDOFF_READY` revision 4 — F1 화음 fixture 단위 수정 및 독립 JVM 재검증, Android SDK 환경 재검증 대기, integration 미통합
+
+## Revision 4 — complete-link 화음 회귀시험 F1 수정
+
+MANAGE_NODE revision 3 검증에서 기존 화음 회귀시험 F1이 재현되어 원인과 단위를
+독립적으로 다시 확인했다.
+
+- 관리 보고서: https://github.com/xodrndishfwk-crypto/HMG_Pleos/blob/280475a745806ffc7d2d1d2ba67467c66983b140/docs/team/MELODY_V1_MANAGE_NODE_REPORT_R3.md
+- 관리 결과: https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/20#issuecomment-6890368821
+- revision 3 code SHA: `3b53d380b5a246f7e620db1df1d15551237ff352`
+- revision 3 feature tip: `d2d0c4c9b977f7e2b73d6553339b6c164613e6bc`
+- revision 4 code SHA: `5809cafcdb188473abdc553ef4d8ad826a5a66f6`
+
+### 원인과 단위 확인
+
+제품 코드와 기존 계획서는 같은 규칙을 사용한다.
+
+1. `originalY`는 별자리의 원본 투영 좌표다.
+2. `rotatedY`는 원본 중심을 기준으로 지정 각도만큼 회전한 좌표다.
+3. `normalizedY`는 회전된 전체 Y 범위를 선택 조성의 음계 index 범위로 확대한 뒤
+   한 음계 step마다 `staffSpacing / 2`를 적용한 악보 좌표다.
+4. 화음 임계값은 이 `normalizedY`에서
+   `staffSpacing × chordThresholdRatio`로 계산한다.
+5. 그룹의 최솟값에서 각 구성원의 거리가 임계값 이내인 경우만 묶으므로
+   complete-link diameter를 만족하고 인접 별을 통한 chain merge를 허용하지 않는다.
+
+기존 F1 fixture는 원본 Y `0.00, 0.02, 0.04, 1.00`을 사용했다. 기본 C-major
+범위에는 29개 음높이와 28개 간격이 있고 `staffSpacing / 2 = 24`이므로 원본 범위가
+1.00일 때 0.02 차이는 다음과 같이 정규화된다.
+
+```text
+0.02 × 28 × 24 = 13.44
+threshold = 48 × 0.15 = 7.20
+```
+
+따라서 기존 a/b는 구현상 화음 후보가 아니며 실제 결과 0개가 현재 단위에 맞았다.
+계획서도 “정규화된 회전 Y”와 임계값으로 판단한다고 명시하므로 결론은
+`제품 알고리즘 문제가 아니라 시험 fixture의 좌표 단위 문제`다.
+
+revision 3이 이 실패를 도입한 것은 아니다. 해당 시험은 revision 3 이전부터 있었으며
+이번 수정은 그 기대를 현재 명시된 단위로 실제 증명하도록 바로잡는다.
+
+### 최소 수정과 complete-link 증거
+
+제품 코드는 변경하지 않고 F1 fixture만 `0.00, 0.01, 0.02, 1.00`으로 수정했다.
+실제 회전 0°·정규화 이후 값은 다음과 같다.
+
+```text
+T = 7.20
+distance(a, b) = 0.01 × 28 × 24 = 6.72 <= T
+distance(b, c) = 0.01 × 28 × 24 = 6.72 <= T
+distance(a, c) = 0.02 × 28 × 24 = 13.44 > T
+```
+
+따라서 `a,b`는 같은 화음이고 `c`는 b와 가깝더라도 a/b 그룹에 chain merge되지 않는다.
+시험에는 다음 경계도 추가했다.
+
+- ratio 0.14에서 6.72와 정확히 같은 임계값 포함
+- ratio 0.139에서 6.72가 임계값을 명확히 초과해 제외
+- 같은 높이의 두 별은 ratio 0.0에서도 화음으로 묶임
+- `chordGenerationEnabled=false`이면 그룹을 만들지 않음
+
+실패 시험 삭제, 기대 화음 개수 0 변경, 기능 비활성화 또는 다른 시험 약화는 하지 않았다.
+
+### 영향 분석
+
+- 변경 파일은 `MelodyGeneratorTest.kt`뿐이며 제품 Kotlin 코드는 변경하지 않았다.
+- 생성 화음, 자동 회전 후보 점수와 선택 각도는 바뀌지 않는다.
+- stable melody ID와 `algorithmVersion`은 바뀌지 않는다.
+- 저장된 확정 멜로디를 재생성하거나 덮어쓰지 않는다.
+- JSON, SQLite schema, migration, 공통 contract와 fixture 변경이 없다.
+- revision 4 인수서 갱신은 별도 문서 커밋으로 구분한다.
+
+### Revision 4 검증 결과
+
+| 검사 | 결과 |
+|---|---|
+| F1 수정 전 독립 Kotlin 실행 | FAIL 재현, exit 1 — chords=0, expected=1 |
+| 독립 Kotlin/JUnit4 생성기 시험 | PASS, exit 0, 10 tests |
+| 독립 Kotlin/JUnit4 생성기+M1+M2+MemoryRepository | PASS, exit 0, 24 tests |
+| `tools/Verify-G1.ps1` | PASS, exit 0, 26 files, hash `a99ecd...7cfe48` |
+| `git diff --check` | PASS |
+| Gradle 생성기 시험 | NOT_RUN, launcher exit 1 — Android SDK location을 찾지 못해 task 시작 전 중단 |
+| Gradle 대상 JVM 회귀 | NOT_RUN, launcher exit 1 — 동일 SDK location 오류 |
+| 전체 JVM/lint/assemble/androidTest 빌드 | NOT_RUN, launcher exit 1 — 동일 SDK location 오류 |
+| connected Android 계측시험 | NOT_RUN, launcher exit 1 — 동일 SDK location 오류 |
+| Android SQLite/UI/오디오/회귀 | NOT_RUN — SDK/에뮬레이터·기기 필요 |
+
+독립 JUnit은 Gradle 전체 PASS를 대신하지 않는다. 이번 원본 환경의 차단 원인은
+`SDK location not found`이며 MANAGE_NODE 환경의 wrapper lock/offline plugin/기기 0대
+상태를 현재 환경의 결과로 복사하지 않았다.
+
+## Revision 4 전달 식별자
+
+```text
+[HANDOFF_READY]
+handoffId: H-MELODY-V1-20261114-01
+revision: 4
+from: NAVIGATION_NODE
+to: MANAGE_NODE / HIGH_PC
+PR: https://github.com/xodrndishfwk-crypto/HMG_Pleos/pull/20
+branch: feat/starlog-melody-v1
+previousCodeSHA: 3b53d380b5a246f7e620db1df1d15551237ff352
+codeSHA: 5809cafcdb188473abdc553ef4d8ad826a5a66f6
+baseSHA: 80657e1d765fe64b881238314d69a358335a994b
+latestRemoteIntegrationSHAAtRevision: ede0b01f2cd5efcd5eae09631c5ed29d00b7d3a9
+mergeBaseSHA: 80657e1d765fe64b881238314d69a358335a994b
+contractVersion: starlog-contracts-1.0.0 (변경 없음)
+contractHarnessHash: a99ecd2e21b0c84717f11b99a7202b5cd3ef844a4a606bf45ce30a9f637cfe48
+productionCodeChanged: false
+integrationStatus: NOT_INTEGRATED
+```
+
+최종 feature tip과 handoff 문서 commit SHA는 이 문서 커밋 후 PR revision 4 본문과
+댓글에서 전달한다.
+
+## Revision 4 수신 노드 다음 행동
+
+1. 원격 feature tip에 `5809cafc...`가 포함되는지 확인한다.
+2. 생성기 10개와 M1/M2/MemoryRepository 24개 저장소 시험을 재실행한다.
+3. HIGH_PC 정상 Android 환경에서 Gradle JVM/lint/assemble/androidTest를 실행한다.
+4. 전용 합성 DB의 v2→v3, reopen, 다른 ID 거부, LIVE/REPLAY 격리를 실행한다.
+5. 1700×1184 UI와 연속 재생/pause/stop/destroy/재진입 회귀를 확인한다.
+6. 모든 필수 검증 전에는 `ACCEPTED/READY_TO_MERGE/INTEGRATED`로 기록하지 않는다.
 
 ## Revision 3 — MANAGE_NODE 검토 후 수정
 

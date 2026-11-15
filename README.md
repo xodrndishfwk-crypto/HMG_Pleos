@@ -6,9 +6,11 @@ StarLog는 목적지까지의 이동을 단순한 경로 기록이 아니라 **�
 남깁니다. Gleo 음성으로 여행을 시작하고, 정차와 방문을 감지해 별을 만들며, 여행 종료 후
 별자리의 기하를 음악으로 변환합니다.
 
-![StarLog Pleos 예상 화면](docs/team/assets/starlog-pleos-expected-ui.png)
+![StarLog Pleos 화면 · 주행 D 별자리 내비](docs/team/assets/starlog-pleos-expected-ui.png)
 
-> 위 이미지는 실제 구현 구조를 바탕으로 만든 시연 예상도입니다. 실제 실행 증거는
+> 위 이미지는 앱 UI와 시연 영상에 사용한 Figma 디자인(Pleos 전체화면 · 주행 D 별자리 내비)입니다.
+> 앱은 같은 디자인으로 인트로 → 한반도 성단 → 주행 D → 정차 P 기억의 창 → 별자리 작성 → 오르골 악보 순서로
+> 동작하며, 주행 데이터는 `DEMO REPLAY`, 음악은 `DEMO MOCK`으로 표시됩니다. 실제 실행 증거는
 > `docs/team/STARLOG_E2E_DEMO_REPORT.md`와 시연 영상에서 구분해 제공합니다.
 
 ## 왜 StarLog인가
